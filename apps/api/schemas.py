@@ -325,3 +325,14 @@ class CurrentUser(BaseModel):
     email: str
     role: str
     team: str
+
+
+class AuditLog(BaseModel):
+    id: int
+    actor_email: str
+    actor_role: str
+    action: str
+    resource_type: str
+    resource_id: str
+    detail: str
+    created_at: str

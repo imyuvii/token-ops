@@ -5,7 +5,7 @@ import asyncio
 import json
 from base64 import urlsafe_b64decode
 
-from fastapi import Cookie, FastAPI, Header, HTTPException, Query
+from fastapi import Cookie, Depends, FastAPI, Header, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response, StreamingResponse
 
@@ -32,6 +32,7 @@ from schemas import (
     ReplayResult,
     TelemetryEvent,
     TelemetryEventCreate,
+    AuditLog,
 )
 from services import (
     create_api_key,
@@ -53,9 +54,12 @@ from services import (
     get_quality_overview,
     get_recent_events,
     list_api_keys,
+    list_audit_logs,
     list_projects,
     list_alert_rules,
     replay_request,
+    record_audit_log,
+    scoped_team_for_user,
     update_alert_rule,
     set_api_key_status,
     test_notification_destination,
@@ -102,6 +106,10 @@ def require_roles(user: CurrentUser, allowed: set[str]) -> CurrentUser:
     return user
 
 
+def get_privileged_user(user: CurrentUser = Depends(get_current_user)) -> CurrentUser:
+    return require_roles(user, {"admin", "manager"})
+
+
 @app.get("/health")
 def health() -> dict[str, str]:
     return {"status": "ok"}
@@ -119,9 +127,17 @@ def get_dashboard(
     model: str | None = None,
     environment: str | None = None,
     application: str | None = None,
+    user: CurrentUser = Depends(get_current_user),
 ) -> DashboardResponse:
     with get_connection() as connection:
-        return get_dashboard_data(connection, days, team, model, environment, application)
+        return get_dashboard_data(
+            connection,
+            days,
+            scoped_team_for_user(user.role, user.team, team),
+            model,
+            environment,
+            application,
+        )
 
 
 @app.get("/api/v1/events", response_model=list[TelemetryEvent])
@@ -132,9 +148,18 @@ def list_events(
     model: str | None = None,
     environment: str | None = None,
     application: str | None = None,
+    user: CurrentUser = Depends(get_current_user),
 ) -> list[TelemetryEvent]:
     with get_connection() as connection:
-        return get_recent_events(connection, limit, days, team, model, environment, application)
+        return get_recent_events(
+            connection,
+            limit,
+            days,
+            scoped_team_for_user(user.role, user.team, team),
+            model,
+            environment,
+            application,
+        )
 
 
 @app.post("/api/v1/events", response_model=TelemetryEvent, status_code=201)
@@ -157,9 +182,17 @@ def list_prompt_insights(
     model: str | None = None,
     environment: str | None = None,
     application: str | None = None,
+    user: CurrentUser = Depends(get_current_user),
 ) -> list[PromptInsight]:
     with get_connection() as connection:
-        return get_prompt_insights(connection, days, team, model, environment, application)
+        return get_prompt_insights(
+            connection,
+            days,
+            scoped_team_for_user(user.role, user.team, team),
+            model,
+            environment,
+            application,
+        )
 
 
 @app.get("/api/v1/models")
@@ -169,29 +202,39 @@ def list_models(
     model: str | None = None,
     environment: str | None = None,
     application: str | None = None,
+    user: CurrentUser = Depends(get_current_user),
 ):
     with get_connection() as connection:
-        return get_model_comparison(connection, days, team, model, environment, application)
+        return get_model_comparison(
+            connection,
+            days,
+            scoped_team_for_user(user.role, user.team, team),
+            model,
+            environment,
+            application,
+        )
 
 
 @app.get("/api/v1/alerts/rules", response_model=list[AlertRule])
-def get_alert_rules() -> list[AlertRule]:
+def get_alert_rules(user: CurrentUser = Depends(get_current_user)) -> list[AlertRule]:
     with get_connection() as connection:
         return list_alert_rules(connection)
 
 
 @app.post("/api/v1/alerts/rules", response_model=AlertRule, status_code=201)
-def add_alert_rule(payload: AlertRuleCreate) -> AlertRule:
-    require_roles(get_current_user(), {"admin", "manager"})
+def add_alert_rule(payload: AlertRuleCreate, user: CurrentUser = Depends(get_privileged_user)) -> AlertRule:
     with get_connection() as connection:
-        return create_alert_rule(connection, payload)
+        rule = create_alert_rule(connection, payload)
+        record_audit_log(connection, user.email, user.role, "create", "alert_rule", str(rule.id), rule.name)
+        return rule
 
 
 @app.patch("/api/v1/alerts/rules/{rule_id}", response_model=AlertRule)
-def toggle_alert_rule(rule_id: int, enabled: bool) -> AlertRule:
-    require_roles(get_current_user(), {"admin", "manager"})
+def toggle_alert_rule(rule_id: int, enabled: bool, user: CurrentUser = Depends(get_privileged_user)) -> AlertRule:
     with get_connection() as connection:
-        return update_alert_rule(connection, rule_id, enabled)
+        rule = update_alert_rule(connection, rule_id, enabled)
+        record_audit_log(connection, user.email, user.role, "toggle", "alert_rule", str(rule.id), f"enabled={enabled}")
+        return rule
 
 
 @app.get("/api/v1/alerts/incidents")
@@ -201,39 +244,49 @@ def list_incidents(
     model: str | None = None,
     environment: str | None = None,
     application: str | None = None,
+    user: CurrentUser = Depends(get_current_user),
 ):
     with get_connection() as connection:
-        return get_incidents(connection, days, team, model, environment, application)
+        return get_incidents(
+            connection,
+            days,
+            scoped_team_for_user(user.role, user.team, team),
+            model,
+            environment,
+            application,
+        )
 
 
 @app.get("/api/v1/projects", response_model=list[Project])
-def get_projects() -> list[Project]:
+def get_projects(user: CurrentUser = Depends(get_current_user)) -> list[Project]:
     with get_connection() as connection:
         return list_projects(connection)
 
 
 @app.get("/api/v1/api-keys", response_model=list[ApiKey])
-def get_api_keys() -> list[ApiKey]:
+def get_api_keys(user: CurrentUser = Depends(get_privileged_user)) -> list[ApiKey]:
     with get_connection() as connection:
         return list_api_keys(connection)
 
 
 @app.post("/api/v1/api-keys", response_model=ApiKeyCreateResponse, status_code=201)
-def add_api_key(payload: ApiKeyCreate) -> ApiKeyCreateResponse:
-    require_roles(get_current_user(), {"admin", "manager"})
+def add_api_key(payload: ApiKeyCreate, user: CurrentUser = Depends(get_privileged_user)) -> ApiKeyCreateResponse:
     with get_connection() as connection:
-        return create_api_key(connection, payload)
+        created = create_api_key(connection, payload)
+        record_audit_log(connection, user.email, user.role, "create", "api_key", str(created.api_key.id), created.api_key.label)
+        return created
 
 
 @app.patch("/api/v1/api-keys/{key_id}", response_model=ApiKey)
-def toggle_api_key(key_id: int, is_active: bool) -> ApiKey:
-    require_roles(get_current_user(), {"admin", "manager"})
+def toggle_api_key(key_id: int, is_active: bool, user: CurrentUser = Depends(get_privileged_user)) -> ApiKey:
     with get_connection() as connection:
-        return set_api_key_status(connection, key_id, is_active)
+        key = set_api_key_status(connection, key_id, is_active)
+        record_audit_log(connection, user.email, user.role, "toggle", "api_key", str(key.id), f"is_active={is_active}")
+        return key
 
 
 @app.post("/api/v1/replay", response_model=ReplayResult)
-def replay(payload: ReplayRequest) -> ReplayResult:
+def replay(payload: ReplayRequest, user: CurrentUser = Depends(get_current_user)) -> ReplayResult:
     with get_connection() as connection:
         try:
             return replay_request(connection, payload)
@@ -248,23 +301,36 @@ def list_anomalies(
     model: str | None = None,
     environment: str | None = None,
     application: str | None = None,
+    user: CurrentUser = Depends(get_current_user),
 ):
     with get_connection() as connection:
-        return get_anomalies(connection, days, team, model, environment, application)
+        return get_anomalies(
+            connection,
+            days,
+            scoped_team_for_user(user.role, user.team, team),
+            model,
+            environment,
+            application,
+        )
 
 
 @app.get("/api/v1/notifications", response_model=list[NotificationDelivery])
-def get_notifications(limit: int = Query(25, ge=1, le=100)) -> list[NotificationDelivery]:
+def get_notifications(limit: int = Query(25, ge=1, le=100), user: CurrentUser = Depends(get_current_user)) -> list[NotificationDelivery]:
     with get_connection() as connection:
         return list_notification_deliveries(connection, limit)
 
 
 @app.get("/api/v1/stream/events")
-async def stream_events(limit: int = Query(10, ge=1, le=25)):
+async def stream_events(limit: int = Query(10, ge=1, le=25), user: CurrentUser = Depends(get_current_user)):
     async def event_generator():
         for _ in range(5):
             with get_connection() as connection:
-                events = get_recent_events(connection, limit=limit, days=30)
+                events = get_recent_events(
+                    connection,
+                    limit=limit,
+                    days=30,
+                    team=scoped_team_for_user(user.role, user.team, None),
+                )
             payload = json.dumps([event.model_dump() for event in events])
             yield f"data: {payload}\n\n"
             await asyncio.sleep(2)
@@ -273,13 +339,13 @@ async def stream_events(limit: int = Query(10, ge=1, le=25)):
 
 
 @app.get("/api/v1/organization", response_model=Organization)
-def get_organization() -> Organization:
+def get_organization(user: CurrentUser = Depends(get_current_user)) -> Organization:
     with get_connection() as connection:
         return get_current_organization(connection)
 
 
 @app.get("/api/v1/members", response_model=list[Member])
-def get_members() -> list[Member]:
+def get_members(user: CurrentUser = Depends(get_privileged_user)) -> list[Member]:
     with get_connection() as connection:
         return list_members(connection)
 
@@ -291,9 +357,17 @@ def export_events(
     model: str | None = None,
     environment: str | None = None,
     application: str | None = None,
+    user: CurrentUser = Depends(get_current_user),
 ):
     with get_connection() as connection:
-        payload = export_events_csv(connection, days, team, model, environment, application)
+        payload = export_events_csv(
+            connection,
+            days,
+            scoped_team_for_user(user.role, user.team, team),
+            model,
+            environment,
+            application,
+        )
     return Response(
         content=payload,
         media_type="text/csv",
@@ -308,9 +382,17 @@ def list_benchmarks(
     model: str | None = None,
     environment: str | None = None,
     application: str | None = None,
+    user: CurrentUser = Depends(get_current_user),
 ) -> list[BenchmarkEntry]:
     with get_connection() as connection:
-        return get_team_benchmarks(connection, days, team, model, environment, application)
+        return get_team_benchmarks(
+            connection,
+            days,
+            scoped_team_for_user(user.role, user.team, team),
+            model,
+            environment,
+            application,
+        )
 
 
 @app.get("/api/v1/recommendations", response_model=list[Recommendation])
@@ -320,9 +402,17 @@ def list_recommendations(
     model: str | None = None,
     environment: str | None = None,
     application: str | None = None,
+    user: CurrentUser = Depends(get_current_user),
 ) -> list[Recommendation]:
     with get_connection() as connection:
-        return get_recommendations(connection, days, team, model, environment, application)
+        return get_recommendations(
+            connection,
+            days,
+            scoped_team_for_user(user.role, user.team, team),
+            model,
+            environment,
+            application,
+        )
 
 
 @app.get("/api/v1/quality", response_model=QualityResponse)
@@ -332,36 +422,60 @@ def get_quality(
     model: str | None = None,
     environment: str | None = None,
     application: str | None = None,
+    user: CurrentUser = Depends(get_current_user),
 ) -> QualityResponse:
     with get_connection() as connection:
-        return get_quality_overview(connection, days, team, model, environment, application)
+        return get_quality_overview(
+            connection,
+            days,
+            scoped_team_for_user(user.role, user.team, team),
+            model,
+            environment,
+            application,
+        )
 
 
 @app.get("/api/v1/notification-destinations", response_model=list[NotificationDestination])
-def get_notification_destinations() -> list[NotificationDestination]:
+def get_notification_destinations(user: CurrentUser = Depends(get_privileged_user)) -> list[NotificationDestination]:
     with get_connection() as connection:
         return list_notification_destinations(connection)
 
 
 @app.post("/api/v1/notification-destinations", response_model=NotificationDestination, status_code=201)
-def add_notification_destination(payload: NotificationDestinationCreate) -> NotificationDestination:
-    require_roles(get_current_user(), {"admin", "manager"})
+def add_notification_destination(
+    payload: NotificationDestinationCreate,
+    user: CurrentUser = Depends(get_privileged_user),
+) -> NotificationDestination:
     with get_connection() as connection:
-        return create_notification_destination(connection, payload.name, payload.channel, payload.target)
+        destination = create_notification_destination(connection, payload.name, payload.channel, payload.target)
+        record_audit_log(connection, user.email, user.role, "create", "notification_destination", str(destination.id), destination.name)
+        return destination
 
 
 @app.patch("/api/v1/notification-destinations/{destination_id}", response_model=NotificationDestination)
-def set_notification_destination(destination_id: int, is_active: bool) -> NotificationDestination:
-    require_roles(get_current_user(), {"admin", "manager"})
+def set_notification_destination(
+    destination_id: int,
+    is_active: bool,
+    user: CurrentUser = Depends(get_privileged_user),
+) -> NotificationDestination:
     with get_connection() as connection:
-        return toggle_notification_destination(connection, destination_id, is_active)
+        destination = toggle_notification_destination(connection, destination_id, is_active)
+        record_audit_log(connection, user.email, user.role, "toggle", "notification_destination", str(destination.id), f"is_active={is_active}")
+        return destination
 
 
 @app.post("/api/v1/notification-destinations/{destination_id}/test", response_model=NotificationDelivery)
-def send_test_notification(destination_id: int) -> NotificationDelivery:
-    require_roles(get_current_user(), {"admin", "manager"})
+def send_test_notification(destination_id: int, user: CurrentUser = Depends(get_privileged_user)) -> NotificationDelivery:
     with get_connection() as connection:
         try:
-            return test_notification_destination(connection, destination_id)
+            delivery = test_notification_destination(connection, destination_id)
+            record_audit_log(connection, user.email, user.role, "test", "notification_destination", str(destination_id), delivery.status)
+            return delivery
         except ValueError as error:
             raise HTTPException(status_code=404, detail=str(error)) from error
+
+
+@app.get("/api/v1/audit-logs", response_model=list[AuditLog])
+def get_audit_logs(limit: int = Query(50, ge=1, le=200), user: CurrentUser = Depends(get_privileged_user)) -> list[AuditLog]:
+    with get_connection() as connection:
+        return list_audit_logs(connection, limit)

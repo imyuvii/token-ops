@@ -24,6 +24,7 @@ import type {
   TelemetryEvent,
   TelemetryEventCreate,
   Member,
+  AuditLog,
 } from "@/lib/types";
 
 const API_BASE_URL =
@@ -44,10 +45,23 @@ function buildQuery(filters?: DashboardFilters): string {
 }
 
 async function fetchJson<T>(path: string): Promise<T> {
-  const response = await fetch(`${API_BASE_URL}${path}`, {
+  const requestInit: RequestInit = {
     cache: "no-store",
     credentials: "include",
-  });
+  };
+
+  if (typeof window === "undefined") {
+    const { cookies } = await import("next/headers");
+    const cookieStore = await cookies();
+    const sessionCookie = cookieStore.get("tokenops_session")?.value;
+    if (sessionCookie) {
+      requestInit.headers = {
+        Cookie: `tokenops_session=${sessionCookie}`,
+      };
+    }
+  }
+
+  const response = await fetch(`${API_BASE_URL}${path}`, requestInit);
 
   if (!response.ok) {
     throw new Error(`Unable to load ${path}`);
@@ -212,6 +226,10 @@ export async function getMe(): Promise<CurrentUser> {
 
 export async function getNotificationDestinations(): Promise<NotificationDestination[]> {
   return fetchJson<NotificationDestination[]>("/api/v1/notification-destinations");
+}
+
+export async function getAuditLogs(): Promise<AuditLog[]> {
+  return fetchJson<AuditLog[]>("/api/v1/audit-logs");
 }
 
 export async function createNotificationDestination(

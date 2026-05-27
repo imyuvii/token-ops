@@ -316,3 +316,14 @@ export type NotificationDestinationCreate = {
   channel: "slack" | "email" | "webhook" | "teams";
   target: string;
 };
+
+export type AuditLog = {
+  id: number;
+  actor_email: string;
+  actor_role: string;
+  action: string;
+  resource_type: string;
+  resource_id: string;
+  detail: string;
+  created_at: string;
+};

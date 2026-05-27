@@ -21,6 +21,7 @@ from schemas import (
     AlertIncident,
     AlertRule,
     AlertRuleCreate,
+    AuditLog,
     CacheSummary,
     DashboardResponse,
     FilterOptions,
@@ -115,6 +116,12 @@ def _build_where(
       params.append(application)
 
     return " WHERE " + " AND ".join(clauses), params
+
+
+def scoped_team_for_user(user_role: str, user_team: str, requested_team: str | None) -> str | None:
+    if user_role == "admin":
+        return requested_team
+    return user_team
 
 
 def _query_events(
@@ -529,6 +536,61 @@ def list_notification_deliveries(connection: sqlite3.Connection, limit: int = 25
         )
         for row in rows
     ]
+
+
+def list_audit_logs(connection: sqlite3.Connection, limit: int = 50) -> list[AuditLog]:
+    rows = connection.execute(
+        """
+        SELECT * FROM audit_logs
+        ORDER BY created_at DESC, id DESC
+        LIMIT ?
+        """,
+        (limit,),
+    ).fetchall()
+    return [
+        AuditLog(
+            id=row["id"],
+            actor_email=row["actor_email"],
+            actor_role=row["actor_role"],
+            action=row["action"],
+            resource_type=row["resource_type"],
+            resource_id=row["resource_id"],
+            detail=row["detail"],
+            created_at=row["created_at"],
+        )
+        for row in rows
+    ]
+
+
+def record_audit_log(
+    connection: sqlite3.Connection,
+    actor_email: str,
+    actor_role: str,
+    action: str,
+    resource_type: str,
+    resource_id: str,
+    detail: str,
+) -> AuditLog:
+    created_at = datetime.now(UTC).isoformat()
+    cursor = connection.execute(
+        """
+        INSERT INTO audit_logs (
+            actor_email, actor_role, action, resource_type, resource_id, detail, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?)
+        """,
+        (actor_email, actor_role, action, resource_type, resource_id, detail, created_at),
+    )
+    connection.commit()
+    return AuditLog(
+        id=cursor.lastrowid,
+        actor_email=actor_email,
+        actor_role=actor_role,
+        action=action,
+        resource_type=resource_type,
+        resource_id=resource_id,
+        detail=detail,
+        created_at=created_at,
+    )
 
 
 def list_notification_destinations(connection: sqlite3.Connection) -> list[NotificationDestination]:
