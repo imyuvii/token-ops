@@ -7,6 +7,7 @@ Production-grade observability for LLM applications.
 This repository now contains a functional full-stack MVP from the PRD:
 
 - `apps/web`: a Next.js observability app with overview, requests, prompts, alerts, and ingest screens
+  plus governance and live-operations views
 - `apps/api`: a FastAPI service with persistent telemetry storage, seeded data, analytics endpoints, and alert rules
 - `sdks/node` and `sdks/python`: simple ingestion clients for sending telemetry events
 
@@ -42,6 +43,7 @@ The dashboard expects the API at `http://localhost:8000` by default.
 - Prompt and version analytics
 - Recent request explorer
 - Alert stream and alert rule manager
+- Live operations stream and notification outbox
 - Team usage leaderboard
 - Cache savings summary
 - Telemetry ingest playground

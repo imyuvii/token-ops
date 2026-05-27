@@ -75,6 +75,16 @@ def init_db() -> None:
                 created_at TEXT NOT NULL,
                 FOREIGN KEY(project_id) REFERENCES projects(id)
             );
+
+            CREATE TABLE IF NOT EXISTS notification_deliveries (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                rule_name TEXT NOT NULL,
+                channel TEXT NOT NULL,
+                severity TEXT NOT NULL,
+                status TEXT NOT NULL,
+                context TEXT NOT NULL,
+                created_at TEXT NOT NULL
+            );
             """
         )
 
@@ -93,6 +103,10 @@ def init_db() -> None:
         api_key_count = connection.execute("SELECT COUNT(*) FROM api_keys").fetchone()[0]
         if api_key_count == 0:
             seed_api_keys(connection)
+
+        notification_count = connection.execute("SELECT COUNT(*) FROM notification_deliveries").fetchone()[0]
+        if notification_count == 0:
+            seed_notification_deliveries(connection)
 
 
 def seed_events(connection: sqlite3.Connection) -> None:
@@ -269,5 +283,36 @@ def seed_api_keys(connection: sqlite3.Connection) -> None:
         VALUES (?, ?, ?, ?, ?, ?)
         """,
         keys,
+    )
+    connection.commit()
+
+
+def seed_notification_deliveries(connection: sqlite3.Connection) -> None:
+    created_at = datetime.now(UTC).isoformat()
+    deliveries = [
+        (
+            "P95 latency threshold",
+            "email",
+            "high",
+            "delivered",
+            "P95 latency crossed the configured threshold for /api/assist/reply.",
+            created_at,
+        ),
+        (
+            "Monthly spend guardrail",
+            "slack",
+            "medium",
+            "delivered",
+            "Support Bot exceeded 80% of its monthly AI budget.",
+            created_at,
+        ),
+    ]
+    connection.executemany(
+        """
+        INSERT INTO notification_deliveries (
+            rule_name, channel, severity, status, context, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?)
+        """,
+        deliveries,
     )
     connection.commit()

@@ -224,3 +224,13 @@ class AnomalyInsight(BaseModel):
     title: str
     context: str
     metric_value: str
+
+
+class NotificationDelivery(BaseModel):
+    id: int
+    rule_name: str
+    channel: str
+    severity: str
+    status: str
+    context: str
+    created_at: str

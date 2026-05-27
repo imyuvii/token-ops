@@ -9,6 +9,7 @@ import type {
   DashboardFilters,
   DashboardResponse,
   ModelComparison,
+  NotificationDelivery,
   Project,
   PromptInsight,
   ReplayRequest,
@@ -164,4 +165,8 @@ export async function replayRequest(payload: ReplayRequest): Promise<ReplayResul
 
 export async function getAnomalies(filters?: DashboardFilters): Promise<AnomalyInsight[]> {
   return fetchJson<AnomalyInsight[]>(`/api/v1/anomalies${buildQuery(filters)}`);
+}
+
+export async function getNotifications(): Promise<NotificationDelivery[]> {
+  return fetchJson<NotificationDelivery[]>("/api/v1/notifications");
 }

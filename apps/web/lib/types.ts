@@ -217,3 +217,13 @@ export type AnomalyInsight = {
   context: string;
   metric_value: string;
 };
+
+export type NotificationDelivery = {
+  id: number;
+  rule_name: string;
+  channel: string;
+  severity: string;
+  status: string;
+  context: string;
+  created_at: string;
+};

@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
+import asyncio
+import json
 
 from fastapi import FastAPI, Header, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 
 from database import get_connection, init_db
 from schemas import (
@@ -13,6 +16,7 @@ from schemas import (
     ApiKeyCreate,
     ApiKeyCreateResponse,
     DashboardResponse,
+    NotificationDelivery,
     PromptInsight,
     Project,
     ReplayRequest,
@@ -28,6 +32,7 @@ from services import (
     get_dashboard_data,
     get_incidents,
     get_model_comparison,
+    list_notification_deliveries,
     get_prompt_insights,
     get_recent_events,
     list_api_keys,
@@ -197,3 +202,22 @@ def list_anomalies(
 ):
     with get_connection() as connection:
         return get_anomalies(connection, days, team, model, environment, application)
+
+
+@app.get("/api/v1/notifications", response_model=list[NotificationDelivery])
+def get_notifications(limit: int = Query(25, ge=1, le=100)) -> list[NotificationDelivery]:
+    with get_connection() as connection:
+        return list_notification_deliveries(connection, limit)
+
+
+@app.get("/api/v1/stream/events")
+async def stream_events(limit: int = Query(10, ge=1, le=25)):
+    async def event_generator():
+        for _ in range(5):
+            with get_connection() as connection:
+                events = get_recent_events(connection, limit=limit, days=30)
+            payload = json.dumps([event.model_dump() for event in events])
+            yield f"data: {payload}\n\n"
+            await asyncio.sleep(2)
+
+    return StreamingResponse(event_generator(), media_type="text/event-stream")

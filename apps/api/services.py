@@ -22,6 +22,7 @@ from schemas import (
     LatencyCell,
     MetricCard,
     ModelComparison,
+    NotificationDelivery,
     PromptInsight,
     Project,
     ReplayRequest,
@@ -486,6 +487,58 @@ def get_incidents(
     return incidents[:6]
 
 
+def list_notification_deliveries(connection: sqlite3.Connection, limit: int = 25) -> list[NotificationDelivery]:
+    rows = connection.execute(
+        """
+        SELECT * FROM notification_deliveries
+        ORDER BY created_at DESC, id DESC
+        LIMIT ?
+        """,
+        (limit,),
+    ).fetchall()
+    return [
+        NotificationDelivery(
+            id=row["id"],
+            rule_name=row["rule_name"],
+            channel=row["channel"],
+            severity=row["severity"],
+            status=row["status"],
+            context=row["context"],
+            created_at=row["created_at"],
+        )
+        for row in rows
+    ]
+
+
+def record_notification_delivery(
+    connection: sqlite3.Connection,
+    rule_name: str,
+    channel: str,
+    severity: str,
+    context: str,
+    status: str = "delivered",
+) -> NotificationDelivery:
+    created_at = datetime.now(UTC).isoformat()
+    cursor = connection.execute(
+        """
+        INSERT INTO notification_deliveries (
+            rule_name, channel, severity, status, context, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?)
+        """,
+        (rule_name, channel, severity, status, context, created_at),
+    )
+    connection.commit()
+    return NotificationDelivery(
+        id=cursor.lastrowid,
+        rule_name=rule_name,
+        channel=channel,
+        severity=severity,
+        status=status,
+        context=context,
+        created_at=created_at,
+    )
+
+
 def list_alert_rules(connection: sqlite3.Connection) -> list[AlertRule]:
     rows = connection.execute(
         "SELECT * FROM alert_rules ORDER BY created_at DESC, id DESC"
@@ -603,7 +656,9 @@ def create_event(connection: sqlite3.Connection, payload: TelemetryEventCreate) 
         "SELECT * FROM telemetry_events WHERE id = ?",
         (cursor.lastrowid,),
     ).fetchone()
-    return _row_to_event(row)
+    created_event = _row_to_event(row)
+    _record_triggered_notifications(connection)
+    return created_event
 
 
 def validate_api_key(connection: sqlite3.Connection, raw_key: str) -> Project | None:
@@ -847,6 +902,33 @@ def get_anomalies(
         )
 
     return anomalies
+
+
+def _record_triggered_notifications(connection: sqlite3.Connection) -> None:
+    rules = list_alert_rules(connection)
+    incidents = get_incidents(connection, 7, None, None, None, None)
+    existing_contexts = {
+        row["context"]
+        for row in connection.execute(
+            "SELECT context FROM notification_deliveries ORDER BY id DESC LIMIT 50"
+        ).fetchall()
+    }
+    for incident in incidents:
+        if incident.context in existing_contexts:
+            continue
+        matching_rule = next(
+            (rule for rule in rules if rule.name == incident.title),
+            None,
+        )
+        if matching_rule is None:
+            continue
+        record_notification_delivery(
+            connection,
+            rule_name=matching_rule.name,
+            channel=matching_rule.channel,
+            severity=matching_rule.severity,
+            context=incident.context,
+        )
 
 
 def _row_to_event(row: sqlite3.Row) -> TelemetryEvent:
