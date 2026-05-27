@@ -22,13 +22,17 @@ type TokenOpsTrackPayload = {
 };
 
 export class TokenOps {
-  constructor(private readonly baseUrl: string) {}
+  constructor(
+    private readonly baseUrl: string,
+    private readonly apiKey?: string
+  ) {}
 
   async track(payload: TokenOpsTrackPayload) {
     const response = await fetch(`${this.baseUrl}/api/v1/events`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
+        ...(this.apiKey ? { "x-tokenops-key": this.apiKey } : {}),
       },
       body: JSON.stringify({
         timestamp: payload.timestamp,
@@ -63,4 +67,3 @@ export class TokenOps {
 }
 
 export const tokenops = new TokenOps("http://localhost:8000");
-

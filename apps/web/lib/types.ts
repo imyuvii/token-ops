@@ -163,3 +163,57 @@ export type DashboardFilters = {
   application?: string;
 };
 
+export type Project = {
+  id: number;
+  name: string;
+  team: string;
+  environment: string;
+  budget_monthly: number;
+  created_at: string;
+};
+
+export type ApiKey = {
+  id: number;
+  label: string;
+  key_prefix: string;
+  project_id: number;
+  project_name: string;
+  is_active: boolean;
+  created_at: string;
+};
+
+export type ApiKeyCreate = {
+  label: string;
+  project_id: number;
+};
+
+export type ApiKeyCreateResponse = {
+  api_key: ApiKey;
+  raw_key: string;
+};
+
+export type ReplayRequest = {
+  request_id: string;
+  temperature?: number | null;
+  compare_model?: string | null;
+};
+
+export type ReplayResult = {
+  source_request_id: string;
+  replay_request_id: string;
+  original_model: string;
+  replay_model: string;
+  original_latency_ms: number;
+  replay_latency_ms: number;
+  original_cost: number;
+  replay_cost: number;
+  output_diff_summary: string;
+};
+
+export type AnomalyInsight = {
+  kind: string;
+  severity: string;
+  title: string;
+  context: string;
+  metric_value: string;
+};

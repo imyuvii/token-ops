@@ -170,3 +170,57 @@ class AlertRule(BaseModel):
     enabled: bool
     created_at: str
 
+
+class Project(BaseModel):
+    id: int
+    name: str
+    team: str
+    environment: str
+    budget_monthly: float
+    created_at: str
+
+
+class ApiKey(BaseModel):
+    id: int
+    label: str
+    key_prefix: str
+    project_id: int
+    project_name: str
+    is_active: bool
+    created_at: str
+
+
+class ApiKeyCreate(BaseModel):
+    label: str
+    project_id: int
+
+
+class ApiKeyCreateResponse(BaseModel):
+    api_key: ApiKey
+    raw_key: str
+
+
+class ReplayRequest(BaseModel):
+    request_id: str
+    temperature: float | None = None
+    compare_model: str | None = None
+
+
+class ReplayResult(BaseModel):
+    source_request_id: str
+    replay_request_id: str
+    original_model: str
+    replay_model: str
+    original_latency_ms: int
+    replay_latency_ms: int
+    original_cost: float
+    replay_cost: float
+    output_diff_summary: str
+
+
+class AnomalyInsight(BaseModel):
+    kind: str
+    severity: str
+    title: str
+    context: str
+    metric_value: str

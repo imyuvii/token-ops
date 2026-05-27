@@ -6,8 +6,9 @@ from urllib import request
 
 
 class TokenOps:
-    def __init__(self, base_url: str):
+    def __init__(self, base_url: str, api_key: str | None = None):
         self.base_url = base_url.rstrip("/")
+        self.api_key = api_key
 
     def track(self, **payload: Any) -> dict[str, Any]:
         request_payload = {
@@ -36,9 +37,11 @@ class TokenOps:
         api_request = request.Request(
             f"{self.base_url}/api/v1/events",
             data=body,
-            headers={"Content-Type": "application/json"},
+            headers={
+                "Content-Type": "application/json",
+                **({"x-tokenops-key": self.api_key} if self.api_key else {}),
+            },
             method="POST",
         )
         with request.urlopen(api_request) as response:
             return json.loads(response.read().decode("utf-8"))
-

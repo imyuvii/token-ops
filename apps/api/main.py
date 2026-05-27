@@ -2,21 +2,41 @@ from __future__ import annotations
 
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, Query
+from fastapi import FastAPI, Header, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 
 from database import get_connection, init_db
-from schemas import AlertRule, AlertRuleCreate, DashboardResponse, PromptInsight, TelemetryEvent, TelemetryEventCreate
+from schemas import (
+    AlertRule,
+    AlertRuleCreate,
+    ApiKey,
+    ApiKeyCreate,
+    ApiKeyCreateResponse,
+    DashboardResponse,
+    PromptInsight,
+    Project,
+    ReplayRequest,
+    ReplayResult,
+    TelemetryEvent,
+    TelemetryEventCreate,
+)
 from services import (
+    create_api_key,
     create_alert_rule,
     create_event,
+    get_anomalies,
     get_dashboard_data,
     get_incidents,
     get_model_comparison,
     get_prompt_insights,
     get_recent_events,
+    list_api_keys,
+    list_projects,
     list_alert_rules,
+    replay_request,
     update_alert_rule,
+    set_api_key_status,
+    validate_api_key,
 )
 
 
@@ -68,8 +88,15 @@ def list_events(
 
 
 @app.post("/api/v1/events", response_model=TelemetryEvent, status_code=201)
-def ingest_event(payload: TelemetryEventCreate) -> TelemetryEvent:
+def ingest_event(
+    payload: TelemetryEventCreate,
+    x_tokenops_key: str | None = Header(default=None),
+) -> TelemetryEvent:
     with get_connection() as connection:
+        if x_tokenops_key:
+            project = validate_api_key(connection, x_tokenops_key)
+            if project is None:
+                raise HTTPException(status_code=401, detail="Invalid TokenOps API key.")
         return create_event(connection, payload)
 
 
@@ -125,3 +152,48 @@ def list_incidents(
 ):
     with get_connection() as connection:
         return get_incidents(connection, days, team, model, environment, application)
+
+
+@app.get("/api/v1/projects", response_model=list[Project])
+def get_projects() -> list[Project]:
+    with get_connection() as connection:
+        return list_projects(connection)
+
+
+@app.get("/api/v1/api-keys", response_model=list[ApiKey])
+def get_api_keys() -> list[ApiKey]:
+    with get_connection() as connection:
+        return list_api_keys(connection)
+
+
+@app.post("/api/v1/api-keys", response_model=ApiKeyCreateResponse, status_code=201)
+def add_api_key(payload: ApiKeyCreate) -> ApiKeyCreateResponse:
+    with get_connection() as connection:
+        return create_api_key(connection, payload)
+
+
+@app.patch("/api/v1/api-keys/{key_id}", response_model=ApiKey)
+def toggle_api_key(key_id: int, is_active: bool) -> ApiKey:
+    with get_connection() as connection:
+        return set_api_key_status(connection, key_id, is_active)
+
+
+@app.post("/api/v1/replay", response_model=ReplayResult)
+def replay(payload: ReplayRequest) -> ReplayResult:
+    with get_connection() as connection:
+        try:
+            return replay_request(connection, payload)
+        except ValueError as error:
+            raise HTTPException(status_code=404, detail=str(error)) from error
+
+
+@app.get("/api/v1/anomalies")
+def list_anomalies(
+    days: int = Query(30, ge=1, le=90),
+    team: str | None = None,
+    model: str | None = None,
+    environment: str | None = None,
+    application: str | None = None,
+):
+    with get_connection() as connection:
+        return get_anomalies(connection, days, team, model, environment, application)

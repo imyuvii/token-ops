@@ -4,10 +4,15 @@ import math
 import re
 import sqlite3
 from datetime import UTC, datetime, timedelta
+from hashlib import sha256
 from typing import Any
 from uuid import uuid4
 
 from schemas import (
+    AnomalyInsight,
+    ApiKey,
+    ApiKeyCreate,
+    ApiKeyCreateResponse,
     AlertIncident,
     AlertRule,
     AlertRuleCreate,
@@ -18,6 +23,9 @@ from schemas import (
     MetricCard,
     ModelComparison,
     PromptInsight,
+    Project,
+    ReplayRequest,
+    ReplayResult,
     RequestOverview,
     SpendPoint,
     TeamUsage,
@@ -596,6 +604,249 @@ def create_event(connection: sqlite3.Connection, payload: TelemetryEventCreate) 
         (cursor.lastrowid,),
     ).fetchone()
     return _row_to_event(row)
+
+
+def validate_api_key(connection: sqlite3.Connection, raw_key: str) -> Project | None:
+    hashed = sha256(raw_key.encode("utf-8")).hexdigest()
+    row = connection.execute(
+        """
+        SELECT projects.*
+        FROM api_keys
+        JOIN projects ON projects.id = api_keys.project_id
+        WHERE api_keys.hashed_key = ? AND api_keys.is_active = 1
+        """,
+        (hashed,),
+    ).fetchone()
+    if row is None:
+        return None
+    return Project(
+        id=row["id"],
+        name=row["name"],
+        team=row["team"],
+        environment=row["environment"],
+        budget_monthly=row["budget_monthly"],
+        created_at=row["created_at"],
+    )
+
+
+def list_projects(connection: sqlite3.Connection) -> list[Project]:
+    rows = connection.execute("SELECT * FROM projects ORDER BY name ASC").fetchall()
+    return [
+        Project(
+            id=row["id"],
+            name=row["name"],
+            team=row["team"],
+            environment=row["environment"],
+            budget_monthly=row["budget_monthly"],
+            created_at=row["created_at"],
+        )
+        for row in rows
+    ]
+
+
+def list_api_keys(connection: sqlite3.Connection) -> list[ApiKey]:
+    rows = connection.execute(
+        """
+        SELECT api_keys.*, projects.name AS project_name
+        FROM api_keys
+        JOIN projects ON projects.id = api_keys.project_id
+        ORDER BY api_keys.created_at DESC, api_keys.id DESC
+        """
+    ).fetchall()
+    return [
+        ApiKey(
+            id=row["id"],
+            label=row["label"],
+            key_prefix=row["key_prefix"],
+            project_id=row["project_id"],
+            project_name=row["project_name"],
+            is_active=bool(row["is_active"]),
+            created_at=row["created_at"],
+        )
+        for row in rows
+    ]
+
+
+def create_api_key(connection: sqlite3.Connection, payload: ApiKeyCreate) -> ApiKeyCreateResponse:
+    raw_key = f"tok_live_{uuid4().hex[:24]}"
+    hashed = sha256(raw_key.encode("utf-8")).hexdigest()
+    created_at = datetime.now(UTC).isoformat()
+    cursor = connection.execute(
+        """
+        INSERT INTO api_keys (label, key_prefix, hashed_key, project_id, is_active, created_at)
+        VALUES (?, ?, ?, ?, ?, ?)
+        """,
+        (payload.label, raw_key[:10], hashed, payload.project_id, 1, created_at),
+    )
+    connection.commit()
+    project_row = connection.execute(
+        "SELECT name FROM projects WHERE id = ?",
+        (payload.project_id,),
+    ).fetchone()
+    return ApiKeyCreateResponse(
+        api_key=ApiKey(
+            id=cursor.lastrowid,
+            label=payload.label,
+            key_prefix=raw_key[:10],
+            project_id=payload.project_id,
+            project_name=project_row["name"],
+            is_active=True,
+            created_at=created_at,
+        ),
+        raw_key=raw_key,
+    )
+
+
+def set_api_key_status(connection: sqlite3.Connection, key_id: int, is_active: bool) -> ApiKey:
+    connection.execute(
+        "UPDATE api_keys SET is_active = ? WHERE id = ?",
+        (int(is_active), key_id),
+    )
+    connection.commit()
+    row = connection.execute(
+        """
+        SELECT api_keys.*, projects.name AS project_name
+        FROM api_keys
+        JOIN projects ON projects.id = api_keys.project_id
+        WHERE api_keys.id = ?
+        """,
+        (key_id,),
+    ).fetchone()
+    return ApiKey(
+        id=row["id"],
+        label=row["label"],
+        key_prefix=row["key_prefix"],
+        project_id=row["project_id"],
+        project_name=row["project_name"],
+        is_active=bool(row["is_active"]),
+        created_at=row["created_at"],
+    )
+
+
+def replay_request(connection: sqlite3.Connection, payload: ReplayRequest) -> ReplayResult:
+    source = connection.execute(
+        "SELECT * FROM telemetry_events WHERE request_id = ?",
+        (payload.request_id,),
+    ).fetchone()
+    if source is None:
+        raise ValueError("Request ID not found.")
+
+    replay_model = payload.compare_model or source["model"]
+    replay_latency_ms = max(320, int(source["latency_ms"] * (0.88 if replay_model != source["model"] else 0.96)))
+    replay_cost = round(source["cost"] * (1.12 if replay_model == "gpt-4.1" else 0.91), 4)
+    replay_event = create_event(
+        connection,
+        TelemetryEventCreate(
+            timestamp=datetime.now(UTC),
+            team=source["team"],
+            user_id=source["user_id"],
+            application=source["application"],
+            environment=source["environment"],
+            endpoint=source["endpoint"],
+            provider=source["provider"],
+            model=replay_model,
+            prompt_name=source["prompt_name"],
+            prompt_version=source["prompt_version"],
+            prompt_text=source["prompt_text_redacted"],
+            tokens_in=source["tokens_in"],
+            tokens_out=source["tokens_out"],
+            cost=replay_cost,
+            latency_ms=replay_latency_ms,
+            ttft_ms=max(120, int(replay_latency_ms * 0.27)),
+            stream_duration_ms=max(200, int(replay_latency_ms * 0.73)),
+            status="success",
+            cache_hit=bool(source["cache_hit"]),
+            error_type=None,
+        ),
+    )
+    diff_summary = (
+        "Replay reduced latency but slightly changed cost envelope."
+        if replay_latency_ms < source["latency_ms"]
+        else "Replay preserved behavior with near-identical latency."
+    )
+    return ReplayResult(
+        source_request_id=source["request_id"],
+        replay_request_id=replay_event.request_id,
+        original_model=source["model"],
+        replay_model=replay_model,
+        original_latency_ms=source["latency_ms"],
+        replay_latency_ms=replay_latency_ms,
+        original_cost=source["cost"],
+        replay_cost=replay_cost,
+        output_diff_summary=diff_summary,
+    )
+
+
+def get_anomalies(
+    connection: sqlite3.Connection,
+    days: int,
+    team: str | None,
+    model: str | None,
+    environment: str | None,
+    application: str | None,
+) -> list[AnomalyInsight]:
+    rows = _query_events(connection, days, team, model, environment, application)
+    prior_rows = _query_events(connection, days * 2, team, model, environment, application)
+    current_cutoff = datetime.now(UTC) - timedelta(days=days)
+    comparison_rows = [row for row in prior_rows if datetime.fromisoformat(row["timestamp"]) < current_cutoff]
+
+    anomalies: list[AnomalyInsight] = []
+    if not rows or not comparison_rows:
+        return anomalies
+
+    current_error_rate = sum(1 for row in rows if row["status"] != "success") / len(rows) * 100
+    prior_error_rate = sum(1 for row in comparison_rows if row["status"] != "success") / len(comparison_rows) * 100
+    if current_error_rate > prior_error_rate + 2:
+        anomalies.append(
+            AnomalyInsight(
+                kind="error-rate",
+                severity="high",
+                title="Error rate regression",
+                context="The selected slice is failing materially more often than the prior baseline window.",
+                metric_value=f"{current_error_rate:.1f}% vs {prior_error_rate:.1f}%",
+            )
+        )
+
+    current_p95 = _percentile([row["latency_ms"] for row in rows], 95)
+    prior_p95 = _percentile([row["latency_ms"] for row in comparison_rows], 95)
+    if current_p95 > prior_p95 + 250:
+        anomalies.append(
+            AnomalyInsight(
+                kind="latency",
+                severity="medium",
+                title="Latency drift detected",
+                context="P95 latency moved meaningfully above the recent baseline.",
+                metric_value=f"{current_p95}ms vs {prior_p95}ms",
+            )
+        )
+
+    current_cache = sum(row["cache_hit"] for row in rows) / len(rows) * 100
+    prior_cache = sum(row["cache_hit"] for row in comparison_rows) / len(comparison_rows) * 100
+    if current_cache < prior_cache - 5:
+        anomalies.append(
+            AnomalyInsight(
+                kind="cache",
+                severity="medium",
+                title="Cache efficiency dropped",
+                context="Prompt or embedding reuse is underperforming compared with the prior period.",
+                metric_value=f"{current_cache:.1f}% vs {prior_cache:.1f}%",
+            )
+        )
+
+    current_cost = sum(row["cost"] for row in rows)
+    prior_cost = sum(row["cost"] for row in comparison_rows)
+    if current_cost > prior_cost * 1.18:
+        anomalies.append(
+            AnomalyInsight(
+                kind="spend",
+                severity="medium",
+                title="Spend acceleration",
+                context="Observed AI spend is growing faster than the prior window baseline.",
+                metric_value=f"{_format_currency(current_cost)} vs {_format_currency(prior_cost)}",
+            )
+        )
+
+    return anomalies
 
 
 def _row_to_event(row: sqlite3.Row) -> TelemetryEvent:

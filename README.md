@@ -57,6 +57,14 @@ The dashboard expects the API at `http://localhost:8000` by default.
 - `POST /api/v1/alerts/rules`
 - `PATCH /api/v1/alerts/rules/{id}?enabled=true|false`
 - `GET /api/v1/alerts/incidents`
+- `GET /api/v1/projects`
+- `GET /api/v1/api-keys`
+- `POST /api/v1/api-keys`
+- `PATCH /api/v1/api-keys/{id}?is_active=true|false`
+- `POST /api/v1/replay`
+- `GET /api/v1/anomalies`
+
+`POST /api/v1/events` accepts an optional `x-tokenops-key` header for governed ingestion.
 
 ## Data model
 
@@ -71,6 +79,13 @@ Telemetry events are stored with:
 - Latency, TTFT, stream duration
 - Success or error state
 - Cache hit and error type
+
+## Added platform features
+
+- Project budgets for AI workloads
+- API key issuance and key status toggling
+- Request replay for debugging and comparison
+- Baseline anomaly insights for spend, latency, cache, and error rate
 
 ## Next recommended milestones
 

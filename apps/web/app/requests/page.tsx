@@ -1,5 +1,6 @@
 import { AppShell } from "@/components/app-shell";
 import { FilterBar } from "@/components/filter-bar";
+import { ReplayPanel } from "@/components/replay-panel";
 import { StatusPill } from "@/components/status-pill";
 import { getDashboardData, getRecentEvents } from "@/lib/api";
 import { parseDashboardFilters } from "@/lib/search-params";
@@ -79,7 +80,8 @@ export default async function RequestsPage({
           </table>
         </div>
       </section>
+
+      <ReplayPanel suggestedRequestId={events[0]?.request_id} />
     </AppShell>
   );
 }
-

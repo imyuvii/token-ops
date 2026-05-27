@@ -1,7 +1,7 @@
 import { AppShell } from "@/components/app-shell";
 import { FilterBar } from "@/components/filter-bar";
 import { StatusPill } from "@/components/status-pill";
-import { getDashboardData } from "@/lib/api";
+import { getAnomalies, getDashboardData } from "@/lib/api";
 import { parseDashboardFilters } from "@/lib/search-params";
 import type { SpendPoint } from "@/lib/types";
 
@@ -54,7 +54,7 @@ export default async function Home({
   searchParams?: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const filters = await parseDashboardFilters(searchParams);
-  const data = await getDashboardData(filters);
+  const [data, anomalies] = await Promise.all([getDashboardData(filters), getAnomalies(filters)]);
   const chartWidth = 760;
   const chartHeight = 260;
   const linePath = buildChartPath(data.spend_series, chartWidth, chartHeight);
@@ -277,6 +277,39 @@ export default async function Home({
         </section>
       </div>
 
+      <section className="rounded-[26px] border border-white/8 bg-white/5 p-5">
+        <p className="text-sm uppercase tracking-[0.24em] text-slate-400">Anomaly insights</p>
+        <h2 className="mt-2 font-space-grotesk text-2xl font-semibold text-white">
+          Baseline shifts across the selected window
+        </h2>
+
+        <div className="mt-6 grid gap-3 lg:grid-cols-2 xl:grid-cols-4">
+          {anomalies.length ? (
+            anomalies.map((anomaly) => (
+              <article
+                key={`${anomaly.kind}-${anomaly.title}`}
+                className="rounded-[22px] border border-white/8 bg-[#0c1625] p-4"
+              >
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <h3 className="font-space-grotesk text-lg text-white">{anomaly.title}</h3>
+                    <p className="mt-2 text-sm text-slate-300">{anomaly.context}</p>
+                  </div>
+                  <StatusPill tone={anomaly.severity === "high" ? "danger" : "warning"}>
+                    {anomaly.severity}
+                  </StatusPill>
+                </div>
+                <p className="mt-4 text-sm text-cyan-200">{anomaly.metric_value}</p>
+              </article>
+            ))
+          ) : (
+            <p className="rounded-[22px] border border-white/8 bg-[#0c1625] p-4 text-sm text-slate-300">
+              No anomalies detected for the current slice.
+            </p>
+          )}
+        </div>
+      </section>
+
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)]">
         <section className="rounded-[26px] border border-white/8 bg-white/5 p-5">
           <p className="text-sm uppercase tracking-[0.24em] text-slate-400">Model comparison</p>
@@ -373,4 +406,3 @@ export default async function Home({
     </AppShell>
   );
 }
-

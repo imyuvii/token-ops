@@ -55,6 +55,26 @@ def init_db() -> None:
                 enabled INTEGER NOT NULL DEFAULT 1,
                 created_at TEXT NOT NULL
             );
+
+            CREATE TABLE IF NOT EXISTS projects (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL UNIQUE,
+                team TEXT NOT NULL,
+                environment TEXT NOT NULL,
+                budget_monthly REAL NOT NULL,
+                created_at TEXT NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS api_keys (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                label TEXT NOT NULL,
+                key_prefix TEXT NOT NULL,
+                hashed_key TEXT NOT NULL,
+                project_id INTEGER NOT NULL,
+                is_active INTEGER NOT NULL DEFAULT 1,
+                created_at TEXT NOT NULL,
+                FOREIGN KEY(project_id) REFERENCES projects(id)
+            );
             """
         )
 
@@ -65,6 +85,14 @@ def init_db() -> None:
         rule_count = connection.execute("SELECT COUNT(*) FROM alert_rules").fetchone()[0]
         if rule_count == 0:
             seed_alert_rules(connection)
+
+        project_count = connection.execute("SELECT COUNT(*) FROM projects").fetchone()[0]
+        if project_count == 0:
+            seed_projects(connection)
+
+        api_key_count = connection.execute("SELECT COUNT(*) FROM api_keys").fetchone()[0]
+        if api_key_count == 0:
+            seed_api_keys(connection)
 
 
 def seed_events(connection: sqlite3.Connection) -> None:
@@ -195,5 +223,51 @@ def seed_alert_rules(connection: sqlite3.Connection) -> None:
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         """,
         rules,
+    )
+    connection.commit()
+
+
+def seed_projects(connection: sqlite3.Connection) -> None:
+    created_at = datetime.now(UTC).isoformat()
+    projects = [
+        ("Support Bot", "Customer Ops", "production", 18000, created_at),
+        ("Fraud Analyzer", "Fraud Platform", "production", 12000, created_at),
+        ("Sales Copilot", "Revenue Systems", "production", 15000, created_at),
+        ("Knowledge Hub", "Internal Search", "production", 9000, created_at),
+    ]
+    connection.executemany(
+        """
+        INSERT INTO projects (name, team, environment, budget_monthly, created_at)
+        VALUES (?, ?, ?, ?, ?)
+        """,
+        projects,
+    )
+    connection.commit()
+
+
+def seed_api_keys(connection: sqlite3.Connection) -> None:
+    from hashlib import sha256
+
+    created_at = datetime.now(UTC).isoformat()
+    project_rows = connection.execute("SELECT id, name FROM projects ORDER BY id ASC").fetchall()
+    keys = []
+    for project in project_rows:
+        raw_key = f"tok_{project['id']}_seed_key"
+        keys.append(
+            (
+                f"{project['name']} default key",
+                raw_key[:10],
+                sha256(raw_key.encode("utf-8")).hexdigest(),
+                project["id"],
+                1,
+                created_at,
+            )
+        )
+    connection.executemany(
+        """
+        INSERT INTO api_keys (label, key_prefix, hashed_key, project_id, is_active, created_at)
+        VALUES (?, ?, ?, ?, ?, ?)
+        """,
+        keys,
     )
     connection.commit()

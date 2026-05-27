@@ -2,10 +2,17 @@ import type {
   AlertIncident,
   AlertRule,
   AlertRuleCreate,
+  AnomalyInsight,
+  ApiKey,
+  ApiKeyCreate,
+  ApiKeyCreateResponse,
   DashboardFilters,
   DashboardResponse,
   ModelComparison,
+  Project,
   PromptInsight,
+  ReplayRequest,
+  ReplayResult,
   TelemetryEvent,
   TelemetryEventCreate,
 } from "@/lib/types";
@@ -109,3 +116,52 @@ export async function createTelemetryEvent(
   return response.json() as Promise<TelemetryEvent>;
 }
 
+export async function getProjects(): Promise<Project[]> {
+  return fetchJson<Project[]>("/api/v1/projects");
+}
+
+export async function getApiKeys(): Promise<ApiKey[]> {
+  return fetchJson<ApiKey[]>("/api/v1/api-keys");
+}
+
+export async function createApiKey(payload: ApiKeyCreate): Promise<ApiKeyCreateResponse> {
+  const response = await fetch(`${API_BASE_URL}/api/v1/api-keys`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(payload),
+  });
+  if (!response.ok) {
+    throw new Error("Unable to create API key.");
+  }
+  return response.json() as Promise<ApiKeyCreateResponse>;
+}
+
+export async function toggleApiKey(keyId: number, isActive: boolean): Promise<ApiKey> {
+  const response = await fetch(`${API_BASE_URL}/api/v1/api-keys/${keyId}?is_active=${isActive}`, {
+    method: "PATCH",
+  });
+  if (!response.ok) {
+    throw new Error("Unable to update API key.");
+  }
+  return response.json() as Promise<ApiKey>;
+}
+
+export async function replayRequest(payload: ReplayRequest): Promise<ReplayResult> {
+  const response = await fetch(`${API_BASE_URL}/api/v1/replay`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(payload),
+  });
+  if (!response.ok) {
+    throw new Error("Unable to replay request.");
+  }
+  return response.json() as Promise<ReplayResult>;
+}
+
+export async function getAnomalies(filters?: DashboardFilters): Promise<AnomalyInsight[]> {
+  return fetchJson<AnomalyInsight[]>(`/api/v1/anomalies${buildQuery(filters)}`);
+}
