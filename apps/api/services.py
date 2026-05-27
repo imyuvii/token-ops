@@ -15,6 +15,7 @@ from schemas import (
     ApiKey,
     ApiKeyCreate,
     ApiKeyCreateResponse,
+    BenchmarkEntry,
     AlertIncident,
     AlertRule,
     AlertRuleCreate,
@@ -31,6 +32,7 @@ from schemas import (
     Project,
     ReplayRequest,
     ReplayResult,
+    Recommendation,
     RequestOverview,
     SpendPoint,
     TeamUsage,
@@ -57,6 +59,13 @@ def _format_compact_currency(value: float) -> str:
     if value >= 1_000:
         return f"${value / 1_000:.1f}k"
     return f"${value:.2f}"
+
+
+def _parse_compact_currency(value: str) -> float:
+    normalized = value.replace("$", "")
+    if normalized.endswith("k"):
+        return float(normalized[:-1]) * 1000
+    return float(normalized)
 
 
 def _percentile(values: list[int], percentile: float) -> int:
@@ -988,6 +997,105 @@ def export_events_csv(
     return output.getvalue()
 
 
+def get_team_benchmarks(
+    connection: sqlite3.Connection,
+    days: int,
+    team: str | None,
+    model: str | None,
+    environment: str | None,
+    application: str | None,
+) -> list[BenchmarkEntry]:
+    rows = _query_events(connection, days, team, model, environment, application)
+    grouped: dict[str, list[sqlite3.Row]] = {}
+    for row in rows:
+        grouped.setdefault(row["team"], []).append(row)
+
+    benchmarks: list[BenchmarkEntry] = []
+    for team_name, team_rows in grouped.items():
+        total = len(team_rows)
+        success_rate = sum(1 for row in team_rows if row["status"] == "success") / total * 100
+        avg_cost = sum(row["cost"] for row in team_rows) / total
+        p95_latency = _percentile([row["latency_ms"] for row in team_rows], 95)
+        cache_rate = sum(row["cache_hit"] for row in team_rows) / total * 100
+        efficiency_score = max(70, min(99, int(success_rate - (avg_cost * 120) + (cache_rate * 0.18))))
+        benchmarks.append(
+            BenchmarkEntry(
+                team=team_name,
+                efficiency_score=efficiency_score,
+                avg_cost_per_request=f"${avg_cost:.3f}",
+                p95_latency=f"{p95_latency}ms",
+                success_rate=f"{success_rate:.1f}%",
+            )
+        )
+    return sorted(benchmarks, key=lambda item: item.efficiency_score, reverse=True)
+
+
+def get_recommendations(
+    connection: sqlite3.Connection,
+    days: int,
+    team: str | None,
+    model: str | None,
+    environment: str | None,
+    application: str | None,
+) -> list[Recommendation]:
+    rows = _query_events(connection, days, team, model, environment, application)
+    if not rows:
+        return []
+
+    recommendations: list[Recommendation] = []
+    model_comparison = _build_model_comparison(rows)
+    prompts = _build_prompt_insights(rows)
+    anomalies = get_anomalies(connection, days, team, model, environment, application)
+
+    expensive_model = max(model_comparison, key=lambda item: _parse_compact_currency(item.avg_cost), default=None)
+    if expensive_model and expensive_model.model == "gpt-4.1":
+        recommendations.append(
+            Recommendation(
+                title="Route lightweight workloads to GPT-4.1-mini",
+                priority="high",
+                category="cost",
+                rationale="GPT-4.1 is the most expensive model in the current slice and a large share of requests are low-risk operational flows.",
+                projected_impact="Reduce blended model spend by 12-18%.",
+            )
+        )
+
+    review_prompt = next((prompt for prompt in prompts if prompt.status == "Needs review"), None)
+    if review_prompt:
+        recommendations.append(
+            Recommendation(
+                title=f"Refine prompt {review_prompt.name} {review_prompt.version}",
+                priority="medium",
+                category="quality",
+                rationale="This prompt version shows weaker success and latency posture than the rest of the fleet.",
+                projected_impact="Reduce retries and latency regressions for the owning team.",
+            )
+        )
+
+    for anomaly in anomalies[:2]:
+        recommendations.append(
+            Recommendation(
+                title=f"Investigate {anomaly.title.lower()}",
+                priority=anomaly.severity,
+                category="operations",
+                rationale=anomaly.context,
+                projected_impact=f"Normalize {anomaly.metric_value}.",
+            )
+        )
+
+    if not recommendations:
+        recommendations.append(
+            Recommendation(
+                title="Expand cache coverage on stable prompts",
+                priority="medium",
+                category="latency",
+                rationale="Current cache hit rates are healthy, but several stable prompt families are good candidates for more aggressive reuse.",
+                projected_impact="Save 5-8% on spend and improve tail latency.",
+            )
+        )
+
+    return recommendations[:5]
+
+
 def _record_triggered_notifications(connection: sqlite3.Connection) -> None:
     rules = list_alert_rules(connection)
     incidents = get_incidents(connection, 7, None, None, None, None)
@@ -1041,3 +1149,4 @@ def _row_to_event(row: sqlite3.Row) -> TelemetryEvent:
         cache_hit=bool(row["cache_hit"]),
         error_type=row["error_type"],
     )
+    BenchmarkEntry,

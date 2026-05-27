@@ -15,12 +15,14 @@ from schemas import (
     ApiKey,
     ApiKeyCreate,
     ApiKeyCreateResponse,
+    BenchmarkEntry,
     DashboardResponse,
     Member,
     NotificationDelivery,
     Organization,
     PromptInsight,
     Project,
+    Recommendation,
     ReplayRequest,
     ReplayResult,
     TelemetryEvent,
@@ -32,6 +34,8 @@ from services import (
     create_event,
     export_events_csv,
     get_anomalies,
+    get_recommendations,
+    get_team_benchmarks,
     get_dashboard_data,
     get_incidents,
     get_model_comparison,
@@ -255,3 +259,27 @@ def export_events(
         media_type="text/csv",
         headers={"Content-Disposition": "attachment; filename=tokenops-events.csv"},
     )
+
+
+@app.get("/api/v1/benchmarks", response_model=list[BenchmarkEntry])
+def list_benchmarks(
+    days: int = Query(30, ge=1, le=90),
+    team: str | None = None,
+    model: str | None = None,
+    environment: str | None = None,
+    application: str | None = None,
+) -> list[BenchmarkEntry]:
+    with get_connection() as connection:
+        return get_team_benchmarks(connection, days, team, model, environment, application)
+
+
+@app.get("/api/v1/recommendations", response_model=list[Recommendation])
+def list_recommendations(
+    days: int = Query(30, ge=1, le=90),
+    team: str | None = None,
+    model: str | None = None,
+    environment: str | None = None,
+    application: str | None = None,
+) -> list[Recommendation]:
+    with get_connection() as connection:
+        return get_recommendations(connection, days, team, model, environment, application)

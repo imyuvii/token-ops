@@ -250,3 +250,19 @@ class Member(BaseModel):
     role: str
     team: str
     created_at: str
+
+
+class BenchmarkEntry(BaseModel):
+    team: str
+    efficiency_score: int
+    avg_cost_per_request: str
+    p95_latency: str
+    success_rate: str
+
+
+class Recommendation(BaseModel):
+    title: str
+    priority: str
+    category: str
+    rationale: str
+    projected_impact: str

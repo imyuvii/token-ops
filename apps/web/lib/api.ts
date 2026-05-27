@@ -6,6 +6,7 @@ import type {
   ApiKey,
   ApiKeyCreate,
   ApiKeyCreateResponse,
+  BenchmarkEntry,
   DashboardFilters,
   DashboardResponse,
   ModelComparison,
@@ -13,6 +14,7 @@ import type {
   Organization,
   Project,
   PromptInsight,
+  Recommendation,
   ReplayRequest,
   ReplayResult,
   TelemetryEvent,
@@ -179,4 +181,12 @@ export async function getOrganization(): Promise<Organization> {
 
 export async function getMembers(): Promise<Member[]> {
   return fetchJson<Member[]>("/api/v1/members");
+}
+
+export async function getBenchmarks(filters?: DashboardFilters): Promise<BenchmarkEntry[]> {
+  return fetchJson<BenchmarkEntry[]>(`/api/v1/benchmarks${buildQuery(filters)}`);
+}
+
+export async function getRecommendations(filters?: DashboardFilters): Promise<Recommendation[]> {
+  return fetchJson<Recommendation[]>(`/api/v1/recommendations${buildQuery(filters)}`);
 }

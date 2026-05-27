@@ -79,6 +79,8 @@ This starts:
 - `GET /api/v1/organization`
 - `GET /api/v1/members`
 - `GET /api/v1/export/events.csv`
+- `GET /api/v1/benchmarks`
+- `GET /api/v1/recommendations`
 
 `POST /api/v1/events` accepts an optional `x-tokenops-key` header for governed ingestion.
 
@@ -105,6 +107,7 @@ Telemetry events are stored with:
 - Live event streaming and notification outbox
 - Dockerized local stack and GitHub Actions CI
 - Organization roles and CSV export support
+- Optimization benchmarks and recommendations
 
 ## Next recommended milestones
 

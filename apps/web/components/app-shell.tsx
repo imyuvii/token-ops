@@ -2,7 +2,15 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 
 type AppShellProps = {
-  active: "overview" | "requests" | "prompts" | "alerts" | "ingest" | "governance" | "live";
+  active:
+    | "overview"
+    | "requests"
+    | "prompts"
+    | "alerts"
+    | "ingest"
+    | "governance"
+    | "live"
+    | "optimizer";
   title: string;
   description: string;
   children: ReactNode;
@@ -13,6 +21,7 @@ const navItems = [
   { href: "/requests", label: "Requests", key: "requests" },
   { href: "/prompts", label: "Prompts", key: "prompts" },
   { href: "/alerts", label: "Alerts", key: "alerts" },
+  { href: "/optimizer", label: "Optimizer", key: "optimizer" },
   { href: "/live", label: "Live Ops", key: "live" },
   { href: "/ingest", label: "Ingest", key: "ingest" },
   { href: "/governance", label: "Governance", key: "governance" },

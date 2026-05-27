@@ -243,3 +243,19 @@ export type Member = {
   team: string;
   created_at: string;
 };
+
+export type BenchmarkEntry = {
+  team: string;
+  efficiency_score: number;
+  avg_cost_per_request: string;
+  p95_latency: string;
+  success_rate: string;
+};
+
+export type Recommendation = {
+  title: string;
+  priority: string;
+  category: string;
+  rationale: string;
+  projected_impact: string;
+};
