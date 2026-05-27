@@ -34,6 +34,17 @@ npm run start
 
 The dashboard expects the API at `http://localhost:8000` by default.
 
+### Docker Compose
+
+```bash
+docker compose up --build
+```
+
+This starts:
+
+- API on `http://localhost:8000`
+- Web app on `http://localhost:3000`
+
 ## Included surfaces
 
 - Executive KPI overview
@@ -88,6 +99,8 @@ Telemetry events are stored with:
 - API key issuance and key status toggling
 - Request replay for debugging and comparison
 - Baseline anomaly insights for spend, latency, cache, and error rate
+- Live event streaming and notification outbox
+- Dockerized local stack and GitHub Actions CI
 
 ## Next recommended milestones
 
