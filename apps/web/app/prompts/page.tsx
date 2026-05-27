@@ -1,6 +1,7 @@
 import { AppShell } from "@/components/app-shell";
 import { FilterBar } from "@/components/filter-bar";
 import { StatusPill } from "@/components/status-pill";
+import { requireSession } from "@/lib/auth";
 import { getDashboardData, getPromptInsights } from "@/lib/api";
 import { parseDashboardFilters } from "@/lib/search-params";
 
@@ -16,6 +17,7 @@ export default async function PromptsPage({
   searchParams?: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const filters = await parseDashboardFilters(searchParams);
+  const session = await requireSession();
   const [dashboard, prompts] = await Promise.all([
     getDashboardData(filters),
     getPromptInsights(filters),
@@ -26,6 +28,7 @@ export default async function PromptsPage({
       active="prompts"
       title="Prompt and version analytics"
       description="Compare prompt versions by cost, latency, request volume, and operational stability."
+      session={session}
     >
       <FilterBar options={dashboard.filters} current={filters} />
 
@@ -65,4 +68,3 @@ export default async function PromptsPage({
     </AppShell>
   );
 }
-

@@ -34,6 +34,16 @@ npm run start
 
 The dashboard expects the API at `http://localhost:8000` by default.
 
+### Demo sign-in
+
+The web app now redirects anonymous users to `/login`.
+Use one of the seeded local demo identities such as:
+
+- `avery@acme.ai` (`admin`)
+- `maya@acme.ai` (`manager`)
+- `nina@acme.ai` (`engineer`)
+- `leo@acme.ai` (`viewer`)
+
 ### Docker Compose
 
 ```bash
@@ -81,6 +91,12 @@ This starts:
 - `GET /api/v1/export/events.csv`
 - `GET /api/v1/benchmarks`
 - `GET /api/v1/recommendations`
+- `GET /api/v1/quality`
+- `GET /api/v1/me`
+- `GET /api/v1/notification-destinations`
+- `POST /api/v1/notification-destinations`
+- `PATCH /api/v1/notification-destinations/{id}?is_active=true|false`
+- `POST /api/v1/notification-destinations/{id}/test`
 
 `POST /api/v1/events` accepts an optional `x-tokenops-key` header for governed ingestion.
 
@@ -108,6 +124,8 @@ Telemetry events are stored with:
 - Dockerized local stack and GitHub Actions CI
 - Organization roles and CSV export support
 - Optimization benchmarks and recommendations
+- Local role-based sign-in and protected admin mutations
+- Quality and hallucination-risk analytics
 
 ## Next recommended milestones
 

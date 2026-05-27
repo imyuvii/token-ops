@@ -1,6 +1,7 @@
 import { AppShell } from "@/components/app-shell";
 import { FilterBar } from "@/components/filter-bar";
 import { StatusPill } from "@/components/status-pill";
+import { requireSession } from "@/lib/auth";
 import { getAnomalies, getDashboardData } from "@/lib/api";
 import { parseDashboardFilters } from "@/lib/search-params";
 import type { SpendPoint } from "@/lib/types";
@@ -54,6 +55,7 @@ export default async function Home({
   searchParams?: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const filters = await parseDashboardFilters(searchParams);
+  const session = await requireSession();
   const [data, anomalies] = await Promise.all([getDashboardData(filters), getAnomalies(filters)]);
   const chartWidth = 760;
   const chartHeight = 260;
@@ -65,6 +67,7 @@ export default async function Home({
       active="overview"
       title="Operational AI observability"
       description="Track spend, latency, prompt performance, routing quality, and alert posture across real telemetry data."
+      session={session}
     >
       <FilterBar options={data.filters} current={filters} />
 

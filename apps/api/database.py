@@ -103,6 +103,15 @@ def init_db() -> None:
                 created_at TEXT NOT NULL,
                 FOREIGN KEY(organization_id) REFERENCES organizations(id)
             );
+
+            CREATE TABLE IF NOT EXISTS notification_destinations (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL,
+                channel TEXT NOT NULL,
+                target TEXT NOT NULL,
+                is_active INTEGER NOT NULL DEFAULT 1,
+                created_at TEXT NOT NULL
+            );
             """
         )
 
@@ -133,6 +142,10 @@ def init_db() -> None:
         member_count = connection.execute("SELECT COUNT(*) FROM members").fetchone()[0]
         if member_count == 0:
             seed_members(connection)
+
+        destination_count = connection.execute("SELECT COUNT(*) FROM notification_destinations").fetchone()[0]
+        if destination_count == 0:
+            seed_notification_destinations(connection)
 
 
 def seed_events(connection: sqlite3.Connection) -> None:
@@ -371,5 +384,23 @@ def seed_members(connection: sqlite3.Connection) -> None:
         VALUES (?, ?, ?, ?, ?, ?)
         """,
         members,
+    )
+    connection.commit()
+
+
+def seed_notification_destinations(connection: sqlite3.Connection) -> None:
+    created_at = datetime.now(UTC).isoformat()
+    destinations = [
+        ("Primary Slack", "slack", "https://example.invalid/slack-webhook", 1, created_at),
+        ("Ops Email", "email", "ops@acme.ai", 1, created_at),
+        ("Incident Webhook", "webhook", "https://example.invalid/incident-webhook", 1, created_at),
+        ("Teams Channel", "teams", "https://example.invalid/teams-webhook", 0, created_at),
+    ]
+    connection.executemany(
+        """
+        INSERT INTO notification_destinations (name, channel, target, is_active, created_at)
+        VALUES (?, ?, ?, ?, ?)
+        """,
+        destinations,
     )
     connection.commit()

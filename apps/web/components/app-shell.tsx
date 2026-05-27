@@ -1,6 +1,9 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 
+import { LogoutButton } from "@/components/logout-button";
+import type { AppSession } from "@/lib/auth";
+
 type AppShellProps = {
   active:
     | "overview"
@@ -10,10 +13,12 @@ type AppShellProps = {
     | "ingest"
     | "governance"
     | "live"
-    | "optimizer";
+    | "optimizer"
+    | "quality";
   title: string;
   description: string;
   children: ReactNode;
+  session: AppSession;
 };
 
 const navItems = [
@@ -21,13 +26,14 @@ const navItems = [
   { href: "/requests", label: "Requests", key: "requests" },
   { href: "/prompts", label: "Prompts", key: "prompts" },
   { href: "/alerts", label: "Alerts", key: "alerts" },
+  { href: "/quality", label: "Quality", key: "quality" },
   { href: "/optimizer", label: "Optimizer", key: "optimizer" },
   { href: "/live", label: "Live Ops", key: "live" },
   { href: "/ingest", label: "Ingest", key: "ingest" },
   { href: "/governance", label: "Governance", key: "governance" },
 ] as const;
 
-export function AppShell({ active, title, description, children }: AppShellProps) {
+export function AppShell({ active, title, description, children, session }: AppShellProps) {
   return (
     <main className="min-h-screen bg-[radial-gradient(circle_at_top_left,_rgba(125,211,252,0.11),_transparent_28%),radial-gradient(circle_at_bottom_right,_rgba(251,146,60,0.14),_transparent_24%),linear-gradient(180deg,_#09111d_0%,_#060b14_100%)] text-slate-100">
       <div className="mx-auto grid min-h-screen max-w-[1600px] grid-cols-1 gap-6 px-4 py-4 lg:grid-cols-[250px_minmax(0,1fr)] lg:px-6">
@@ -68,11 +74,24 @@ export function AppShell({ active, title, description, children }: AppShellProps
 
         <section className="space-y-6 rounded-[28px] border border-white/8 bg-white/4 p-4 backdrop-blur-xl lg:p-6">
           <header className="rounded-[26px] border border-white/8 bg-[linear-gradient(135deg,_rgba(255,255,255,0.08),_rgba(255,255,255,0.02))] p-5">
-            <p className="text-sm uppercase tracking-[0.28em] text-slate-400">TokenOps control plane</p>
-            <h1 className="mt-3 font-space-grotesk text-4xl font-semibold tracking-tight text-white">
-              {title}
-            </h1>
-            <p className="mt-3 max-w-3xl text-sm text-slate-300 lg:text-base">{description}</p>
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+              <div>
+                <p className="text-sm uppercase tracking-[0.28em] text-slate-400">TokenOps control plane</p>
+                <h1 className="mt-3 font-space-grotesk text-4xl font-semibold tracking-tight text-white">
+                  {title}
+                </h1>
+                <p className="mt-3 max-w-3xl text-sm text-slate-300 lg:text-base">{description}</p>
+              </div>
+              <div className="flex items-center gap-3">
+                <div className="rounded-2xl border border-white/10 bg-white/6 px-4 py-2 text-right text-sm">
+                  <p className="text-white">{session.name}</p>
+                  <p className="text-slate-400">
+                    {session.role} • {session.team}
+                  </p>
+                </div>
+                <LogoutButton />
+              </div>
+            </div>
           </header>
 
           {children}

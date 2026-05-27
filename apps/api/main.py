@@ -3,8 +3,9 @@ from __future__ import annotations
 from contextlib import asynccontextmanager
 import asyncio
 import json
+from base64 import urlsafe_b64decode
 
-from fastapi import FastAPI, Header, HTTPException, Query
+from fastapi import Cookie, FastAPI, Header, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response, StreamingResponse
 
@@ -16,12 +17,16 @@ from schemas import (
     ApiKeyCreate,
     ApiKeyCreateResponse,
     BenchmarkEntry,
+    CurrentUser,
     DashboardResponse,
     Member,
     NotificationDelivery,
+    NotificationDestination,
+    NotificationDestinationCreate,
     Organization,
     PromptInsight,
     Project,
+    QualityResponse,
     Recommendation,
     ReplayRequest,
     ReplayResult,
@@ -32,6 +37,7 @@ from services import (
     create_api_key,
     create_alert_rule,
     create_event,
+    create_notification_destination,
     export_events_csv,
     get_anomalies,
     get_recommendations,
@@ -41,8 +47,10 @@ from services import (
     get_model_comparison,
     get_current_organization,
     list_notification_deliveries,
+    list_notification_destinations,
     list_members,
     get_prompt_insights,
+    get_quality_overview,
     get_recent_events,
     list_api_keys,
     list_projects,
@@ -50,6 +58,8 @@ from services import (
     replay_request,
     update_alert_rule,
     set_api_key_status,
+    test_notification_destination,
+    toggle_notification_destination,
     validate_api_key,
 )
 
@@ -64,16 +74,42 @@ app = FastAPI(title="TokenOps API", version="0.2.0", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=["http://localhost:3001", "http://127.0.0.1:3001"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
 
+def get_current_user(tokenops_session: str | None = Cookie(default=None)) -> CurrentUser:
+    if not tokenops_session:
+        raise HTTPException(status_code=401, detail="Not authenticated.")
+    try:
+        payload = json.loads(urlsafe_b64decode(f"{tokenops_session}==").decode("utf-8"))
+    except Exception as error:  # noqa: BLE001
+        raise HTTPException(status_code=401, detail="Invalid session.") from error
+    return CurrentUser(
+        name=payload["name"],
+        email=payload["email"],
+        role=payload["role"],
+        team=payload["team"],
+    )
+
+
+def require_roles(user: CurrentUser, allowed: set[str]) -> CurrentUser:
+    if user.role not in allowed:
+        raise HTTPException(status_code=403, detail="Insufficient permissions.")
+    return user
+
+
 @app.get("/health")
 def health() -> dict[str, str]:
     return {"status": "ok"}
+
+
+@app.get("/api/v1/me", response_model=CurrentUser)
+def get_me(tokenops_session: str | None = Cookie(default=None)) -> CurrentUser:
+    return get_current_user(tokenops_session)
 
 
 @app.get("/api/v1/dashboard", response_model=DashboardResponse)
@@ -146,12 +182,14 @@ def get_alert_rules() -> list[AlertRule]:
 
 @app.post("/api/v1/alerts/rules", response_model=AlertRule, status_code=201)
 def add_alert_rule(payload: AlertRuleCreate) -> AlertRule:
+    require_roles(get_current_user(), {"admin", "manager"})
     with get_connection() as connection:
         return create_alert_rule(connection, payload)
 
 
 @app.patch("/api/v1/alerts/rules/{rule_id}", response_model=AlertRule)
 def toggle_alert_rule(rule_id: int, enabled: bool) -> AlertRule:
+    require_roles(get_current_user(), {"admin", "manager"})
     with get_connection() as connection:
         return update_alert_rule(connection, rule_id, enabled)
 
@@ -182,12 +220,14 @@ def get_api_keys() -> list[ApiKey]:
 
 @app.post("/api/v1/api-keys", response_model=ApiKeyCreateResponse, status_code=201)
 def add_api_key(payload: ApiKeyCreate) -> ApiKeyCreateResponse:
+    require_roles(get_current_user(), {"admin", "manager"})
     with get_connection() as connection:
         return create_api_key(connection, payload)
 
 
 @app.patch("/api/v1/api-keys/{key_id}", response_model=ApiKey)
 def toggle_api_key(key_id: int, is_active: bool) -> ApiKey:
+    require_roles(get_current_user(), {"admin", "manager"})
     with get_connection() as connection:
         return set_api_key_status(connection, key_id, is_active)
 
@@ -283,3 +323,45 @@ def list_recommendations(
 ) -> list[Recommendation]:
     with get_connection() as connection:
         return get_recommendations(connection, days, team, model, environment, application)
+
+
+@app.get("/api/v1/quality", response_model=QualityResponse)
+def get_quality(
+    days: int = Query(30, ge=1, le=90),
+    team: str | None = None,
+    model: str | None = None,
+    environment: str | None = None,
+    application: str | None = None,
+) -> QualityResponse:
+    with get_connection() as connection:
+        return get_quality_overview(connection, days, team, model, environment, application)
+
+
+@app.get("/api/v1/notification-destinations", response_model=list[NotificationDestination])
+def get_notification_destinations() -> list[NotificationDestination]:
+    with get_connection() as connection:
+        return list_notification_destinations(connection)
+
+
+@app.post("/api/v1/notification-destinations", response_model=NotificationDestination, status_code=201)
+def add_notification_destination(payload: NotificationDestinationCreate) -> NotificationDestination:
+    require_roles(get_current_user(), {"admin", "manager"})
+    with get_connection() as connection:
+        return create_notification_destination(connection, payload.name, payload.channel, payload.target)
+
+
+@app.patch("/api/v1/notification-destinations/{destination_id}", response_model=NotificationDestination)
+def set_notification_destination(destination_id: int, is_active: bool) -> NotificationDestination:
+    require_roles(get_current_user(), {"admin", "manager"})
+    with get_connection() as connection:
+        return toggle_notification_destination(connection, destination_id, is_active)
+
+
+@app.post("/api/v1/notification-destinations/{destination_id}/test", response_model=NotificationDelivery)
+def send_test_notification(destination_id: int) -> NotificationDelivery:
+    require_roles(get_current_user(), {"admin", "manager"})
+    with get_connection() as connection:
+        try:
+            return test_notification_destination(connection, destination_id)
+        except ValueError as error:
+            raise HTTPException(status_code=404, detail=str(error)) from error

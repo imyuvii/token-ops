@@ -259,3 +259,46 @@ export type Recommendation = {
   rationale: string;
   projected_impact: string;
 };
+
+export type QualityMetric = {
+  label: string;
+  value: string;
+  trend: string;
+};
+
+export type QualityPromptRisk = {
+  prompt_name: string;
+  version: string;
+  owner: string;
+  hallucination_risk: string;
+  confidence_score: string;
+  quality_status: string;
+};
+
+export type QualityResponse = {
+  metrics: QualityMetric[];
+  risky_prompts: QualityPromptRisk[];
+  low_confidence_requests: string[];
+};
+
+export type CurrentUser = {
+  name: string;
+  email: string;
+  role: string;
+  team: string;
+};
+
+export type NotificationDestination = {
+  id: number;
+  name: string;
+  channel: "slack" | "email" | "webhook" | "teams";
+  target: string;
+  is_active: boolean;
+  created_at: string;
+};
+
+export type NotificationDestinationCreate = {
+  name: string;
+  channel: "slack" | "email" | "webhook" | "teams";
+  target: string;
+};

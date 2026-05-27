@@ -1,8 +1,15 @@
 import { AlertRulesManager } from "@/components/alert-rules-manager";
 import { AppShell } from "@/components/app-shell";
 import { FilterBar } from "@/components/filter-bar";
+import { NotificationDestinationsManager } from "@/components/notification-destinations-manager";
 import { StatusPill } from "@/components/status-pill";
-import { getAlertIncidents, getAlertRules, getDashboardData } from "@/lib/api";
+import { requireSession } from "@/lib/auth";
+import {
+  getAlertIncidents,
+  getAlertRules,
+  getDashboardData,
+  getNotificationDestinations,
+} from "@/lib/api";
 import { parseDashboardFilters } from "@/lib/search-params";
 
 export default async function AlertsPage({
@@ -11,10 +18,12 @@ export default async function AlertsPage({
   searchParams?: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const filters = await parseDashboardFilters(searchParams);
-  const [dashboard, incidents, rules] = await Promise.all([
+  const session = await requireSession({ roles: ["admin", "manager"] });
+  const [dashboard, incidents, rules, destinations] = await Promise.all([
     getDashboardData(filters),
     getAlertIncidents(filters),
     getAlertRules(),
+    getNotificationDestinations(),
   ]);
 
   return (
@@ -22,6 +31,7 @@ export default async function AlertsPage({
       active="alerts"
       title="Alerting and operational guardrails"
       description="Manage alert rules and review triggered incidents across cost, latency, error rate, and cache efficiency."
+      session={session}
     >
       <FilterBar options={dashboard.filters} current={filters} />
 
@@ -63,7 +73,7 @@ export default async function AlertsPage({
       </section>
 
       <AlertRulesManager initialRules={rules} />
+      <NotificationDestinationsManager initialDestinations={destinations} />
     </AppShell>
   );
 }
-

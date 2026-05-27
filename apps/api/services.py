@@ -9,6 +9,8 @@ from hashlib import sha256
 from typing import Any
 from uuid import uuid4
 import csv
+from urllib import request as urlrequest
+from urllib.error import URLError
 
 from schemas import (
     AnomalyInsight,
@@ -29,7 +31,11 @@ from schemas import (
     Organization,
     PromptInsight,
     Member,
+    NotificationDestination,
     Project,
+    QualityMetric,
+    QualityPromptRisk,
+    QualityResponse,
     ReplayRequest,
     ReplayResult,
     Recommendation,
@@ -523,6 +529,72 @@ def list_notification_deliveries(connection: sqlite3.Connection, limit: int = 25
     ]
 
 
+def list_notification_destinations(connection: sqlite3.Connection) -> list[NotificationDestination]:
+    rows = connection.execute(
+        "SELECT * FROM notification_destinations ORDER BY created_at DESC, id DESC"
+    ).fetchall()
+    return [
+        NotificationDestination(
+            id=row["id"],
+            name=row["name"],
+            channel=row["channel"],
+            target=row["target"],
+            is_active=bool(row["is_active"]),
+            created_at=row["created_at"],
+        )
+        for row in rows
+    ]
+
+
+def create_notification_destination(
+    connection: sqlite3.Connection,
+    name: str,
+    channel: str,
+    target: str,
+) -> NotificationDestination:
+    created_at = datetime.now(UTC).isoformat()
+    cursor = connection.execute(
+        """
+        INSERT INTO notification_destinations (name, channel, target, is_active, created_at)
+        VALUES (?, ?, ?, ?, ?)
+        """,
+        (name, channel, target, 1, created_at),
+    )
+    connection.commit()
+    return NotificationDestination(
+        id=cursor.lastrowid,
+        name=name,
+        channel=channel,
+        target=target,
+        is_active=True,
+        created_at=created_at,
+    )
+
+
+def toggle_notification_destination(
+    connection: sqlite3.Connection,
+    destination_id: int,
+    is_active: bool,
+) -> NotificationDestination:
+    connection.execute(
+        "UPDATE notification_destinations SET is_active = ? WHERE id = ?",
+        (int(is_active), destination_id),
+    )
+    connection.commit()
+    row = connection.execute(
+        "SELECT * FROM notification_destinations WHERE id = ?",
+        (destination_id,),
+    ).fetchone()
+    return NotificationDestination(
+        id=row["id"],
+        name=row["name"],
+        channel=row["channel"],
+        target=row["target"],
+        is_active=bool(row["is_active"]),
+        created_at=row["created_at"],
+    )
+
+
 def get_current_organization(connection: sqlite3.Connection) -> Organization:
     row = connection.execute("SELECT * FROM organizations ORDER BY id ASC LIMIT 1").fetchone()
     return Organization(
@@ -576,6 +648,45 @@ def record_notification_delivery(
         status=status,
         context=context,
         created_at=created_at,
+    )
+
+
+def test_notification_destination(
+    connection: sqlite3.Connection,
+    destination_id: int,
+) -> NotificationDelivery:
+    row = connection.execute(
+        "SELECT * FROM notification_destinations WHERE id = ?",
+        (destination_id,),
+    ).fetchone()
+    if row is None:
+        raise ValueError("Destination not found.")
+
+    status = "delivered"
+    context = f"Test notification sent to {row['target']}."
+
+    if row["channel"] in {"webhook", "slack", "teams"}:
+        payload = b'{"source":"TokenOps","type":"test","message":"Test notification"}'
+        req = urlrequest.Request(
+            row["target"],
+            data=payload,
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        try:
+            with urlrequest.urlopen(req, timeout=3):
+                pass
+        except URLError:
+            status = "failed"
+            context = f"Test delivery to {row['target']} could not be completed from the local environment."
+
+    return record_notification_delivery(
+        connection,
+        rule_name=f"Test: {row['name']}",
+        channel=row["channel"],
+        severity="low",
+        context=context,
+        status=status,
     )
 
 
@@ -1094,6 +1205,63 @@ def get_recommendations(
         )
 
     return recommendations[:5]
+
+
+def get_quality_overview(
+    connection: sqlite3.Connection,
+    days: int,
+    team: str | None,
+    model: str | None,
+    environment: str | None,
+    application: str | None,
+) -> QualityResponse:
+    rows = _query_events(connection, days, team, model, environment, application)
+    if not rows:
+        return QualityResponse(metrics=[], risky_prompts=[], low_confidence_requests=[])
+
+    success_rate = sum(1 for row in rows if row["status"] == "success") / len(rows) * 100
+    cache_rate = sum(row["cache_hit"] for row in rows) / len(rows) * 100
+    latency_p95 = _percentile([row["latency_ms"] for row in rows], 95)
+    confidence_score = max(62, min(98, int(success_rate - ((latency_p95 - 1000) / 120) + cache_rate * 0.12)))
+    hallucination_risk = max(2, min(18, round((100 - success_rate) * 0.8 + (100 - cache_rate) * 0.06, 1)))
+
+    metrics = [
+      QualityMetric(label="Confidence score", value=f"{confidence_score}/100", trend="derived from success, latency, and cache posture"),
+      QualityMetric(label="Hallucination risk", value=f"{hallucination_risk:.1f}%", trend="heuristic operational risk estimate"),
+      QualityMetric(label="Reliable responses", value=f"{success_rate:.1f}%", trend="successful requests in the current window"),
+    ]
+
+    prompt_rows = _build_prompt_insights(rows)
+    risky_prompts: list[QualityPromptRisk] = []
+    for prompt in prompt_rows[:6]:
+        prompt_success = float(prompt.success_rate.replace("%", ""))
+        prompt_latency = float(prompt.avg_latency.replace("s", ""))
+        prompt_confidence = max(55, min(98, int(prompt_success - prompt_latency * 3.5)))
+        prompt_risk = max(1.5, min(22, round((100 - prompt_success) * 0.9 + prompt_latency * 0.7, 1)))
+        status = "Stable" if prompt_confidence >= 90 else "Review"
+        risky_prompts.append(
+            QualityPromptRisk(
+                prompt_name=prompt.name,
+                version=prompt.version,
+                owner=prompt.owner,
+                hallucination_risk=f"{prompt_risk:.1f}%",
+                confidence_score=f"{prompt_confidence}/100",
+                quality_status=status,
+            )
+        )
+
+    low_confidence_requests = [
+        row["request_id"]
+        for row in rows
+        if row["status"] != "success" or row["latency_ms"] > latency_p95 or row["cache_hit"] == 0
+    ][:8]
+
+    risky_prompts.sort(key=lambda item: float(item.hallucination_risk.replace("%", "")), reverse=True)
+    return QualityResponse(
+        metrics=metrics,
+        risky_prompts=risky_prompts,
+        low_confidence_requests=low_confidence_requests,
+    )
 
 
 def _record_triggered_notifications(connection: sqlite3.Connection) -> None:

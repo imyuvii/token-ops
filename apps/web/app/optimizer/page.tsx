@@ -1,6 +1,7 @@
 import { AppShell } from "@/components/app-shell";
 import { FilterBar } from "@/components/filter-bar";
 import { StatusPill } from "@/components/status-pill";
+import { requireSession } from "@/lib/auth";
 import { getBenchmarks, getDashboardData, getRecommendations } from "@/lib/api";
 import { parseDashboardFilters } from "@/lib/search-params";
 
@@ -10,6 +11,7 @@ export default async function OptimizerPage({
   searchParams?: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const filters = await parseDashboardFilters(searchParams);
+  const session = await requireSession({ roles: ["admin", "manager", "engineer"] });
   const [dashboard, benchmarks, recommendations] = await Promise.all([
     getDashboardData(filters),
     getBenchmarks(filters),
@@ -21,6 +23,7 @@ export default async function OptimizerPage({
       active="optimizer"
       title="Optimization benchmarks and recommendations"
       description="Turn observability into action with team benchmarks and concrete recommendations for cost, latency, and quality improvements."
+      session={session}
     >
       <FilterBar options={dashboard.filters} current={filters} />
 

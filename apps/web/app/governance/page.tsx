@@ -1,9 +1,11 @@
 import { ApiKeysManager } from "@/components/api-keys-manager";
 import { AppShell } from "@/components/app-shell";
 import { StatusPill } from "@/components/status-pill";
+import { requireSession } from "@/lib/auth";
 import { getApiKeys, getMembers, getOrganization, getProjects } from "@/lib/api";
 
 export default async function GovernancePage() {
+  const session = await requireSession({ roles: ["admin", "manager"] });
   const [projects, apiKeys, organization, members] = await Promise.all([
     getProjects(),
     getApiKeys(),
@@ -16,6 +18,7 @@ export default async function GovernancePage() {
       active="governance"
       title="Governed ingestion and project controls"
       description="Manage projects, monthly AI budgets, and ingestion credentials used by downstream applications."
+      session={session}
     >
       <section className="rounded-[26px] border border-white/8 bg-white/5 p-5">
         <div className="flex items-center justify-between gap-4">

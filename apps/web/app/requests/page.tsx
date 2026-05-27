@@ -2,6 +2,7 @@ import { AppShell } from "@/components/app-shell";
 import { FilterBar } from "@/components/filter-bar";
 import { ReplayPanel } from "@/components/replay-panel";
 import { StatusPill } from "@/components/status-pill";
+import { requireSession } from "@/lib/auth";
 import { getDashboardData, getRecentEvents } from "@/lib/api";
 import { parseDashboardFilters } from "@/lib/search-params";
 
@@ -11,6 +12,7 @@ export default async function RequestsPage({
   searchParams?: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const filters = await parseDashboardFilters(searchParams);
+  const session = await requireSession();
   const [dashboard, events] = await Promise.all([
     getDashboardData(filters),
     getRecentEvents(filters),
@@ -21,6 +23,7 @@ export default async function RequestsPage({
       active="requests"
       title="Recent AI request traces"
       description="Inspect recent AI requests with prompt lineage, token cost, latency, cache usage, and failure context."
+      session={session}
     >
       <FilterBar options={dashboard.filters} current={filters} />
 

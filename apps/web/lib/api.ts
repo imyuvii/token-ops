@@ -7,13 +7,17 @@ import type {
   ApiKeyCreate,
   ApiKeyCreateResponse,
   BenchmarkEntry,
+  CurrentUser,
   DashboardFilters,
   DashboardResponse,
   ModelComparison,
   NotificationDelivery,
+  NotificationDestination,
+  NotificationDestinationCreate,
   Organization,
   Project,
   PromptInsight,
+  QualityResponse,
   Recommendation,
   ReplayRequest,
   ReplayResult,
@@ -42,6 +46,7 @@ function buildQuery(filters?: DashboardFilters): string {
 async function fetchJson<T>(path: string): Promise<T> {
   const response = await fetch(`${API_BASE_URL}${path}`, {
     cache: "no-store",
+    credentials: "include",
   });
 
   if (!response.ok) {
@@ -78,6 +83,7 @@ export async function getAlertIncidents(filters?: DashboardFilters): Promise<Ale
 export async function createAlertRule(payload: AlertRuleCreate): Promise<AlertRule> {
   const response = await fetch(`${API_BASE_URL}/api/v1/alerts/rules`, {
     method: "POST",
+    credentials: "include",
     headers: {
       "Content-Type": "application/json",
     },
@@ -94,6 +100,7 @@ export async function createAlertRule(payload: AlertRuleCreate): Promise<AlertRu
 export async function toggleAlertRule(ruleId: number, enabled: boolean): Promise<AlertRule> {
   const response = await fetch(`${API_BASE_URL}/api/v1/alerts/rules/${ruleId}?enabled=${enabled}`, {
     method: "PATCH",
+    credentials: "include",
   });
 
   if (!response.ok) {
@@ -108,6 +115,7 @@ export async function createTelemetryEvent(
 ): Promise<TelemetryEvent> {
   const response = await fetch(`${API_BASE_URL}/api/v1/events`, {
     method: "POST",
+    credentials: "include",
     headers: {
       "Content-Type": "application/json",
     },
@@ -132,6 +140,7 @@ export async function getApiKeys(): Promise<ApiKey[]> {
 export async function createApiKey(payload: ApiKeyCreate): Promise<ApiKeyCreateResponse> {
   const response = await fetch(`${API_BASE_URL}/api/v1/api-keys`, {
     method: "POST",
+    credentials: "include",
     headers: {
       "Content-Type": "application/json",
     },
@@ -146,6 +155,7 @@ export async function createApiKey(payload: ApiKeyCreate): Promise<ApiKeyCreateR
 export async function toggleApiKey(keyId: number, isActive: boolean): Promise<ApiKey> {
   const response = await fetch(`${API_BASE_URL}/api/v1/api-keys/${keyId}?is_active=${isActive}`, {
     method: "PATCH",
+    credentials: "include",
   });
   if (!response.ok) {
     throw new Error("Unable to update API key.");
@@ -156,6 +166,7 @@ export async function toggleApiKey(keyId: number, isActive: boolean): Promise<Ap
 export async function replayRequest(payload: ReplayRequest): Promise<ReplayResult> {
   const response = await fetch(`${API_BASE_URL}/api/v1/replay`, {
     method: "POST",
+    credentials: "include",
     headers: {
       "Content-Type": "application/json",
     },
@@ -189,4 +200,66 @@ export async function getBenchmarks(filters?: DashboardFilters): Promise<Benchma
 
 export async function getRecommendations(filters?: DashboardFilters): Promise<Recommendation[]> {
   return fetchJson<Recommendation[]>(`/api/v1/recommendations${buildQuery(filters)}`);
+}
+
+export async function getQuality(filters?: DashboardFilters): Promise<QualityResponse> {
+  return fetchJson<QualityResponse>(`/api/v1/quality${buildQuery(filters)}`);
+}
+
+export async function getMe(): Promise<CurrentUser> {
+  return fetchJson<CurrentUser>("/api/v1/me");
+}
+
+export async function getNotificationDestinations(): Promise<NotificationDestination[]> {
+  return fetchJson<NotificationDestination[]>("/api/v1/notification-destinations");
+}
+
+export async function createNotificationDestination(
+  payload: NotificationDestinationCreate
+): Promise<NotificationDestination> {
+  const response = await fetch(`${API_BASE_URL}/api/v1/notification-destinations`, {
+    method: "POST",
+    credentials: "include",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(payload),
+  });
+  if (!response.ok) {
+    throw new Error("Unable to create notification destination.");
+  }
+  return response.json() as Promise<NotificationDestination>;
+}
+
+export async function toggleNotificationDestination(
+  destinationId: number,
+  isActive: boolean
+): Promise<NotificationDestination> {
+  const response = await fetch(
+    `${API_BASE_URL}/api/v1/notification-destinations/${destinationId}?is_active=${isActive}`,
+    {
+      method: "PATCH",
+      credentials: "include",
+    }
+  );
+  if (!response.ok) {
+    throw new Error("Unable to update notification destination.");
+  }
+  return response.json() as Promise<NotificationDestination>;
+}
+
+export async function testNotificationDestination(
+  destinationId: number
+): Promise<NotificationDelivery> {
+  const response = await fetch(
+    `${API_BASE_URL}/api/v1/notification-destinations/${destinationId}/test`,
+    {
+      method: "POST",
+      credentials: "include",
+    }
+  );
+  if (!response.ok) {
+    throw new Error("Unable to send test notification.");
+  }
+  return response.json() as Promise<NotificationDelivery>;
 }

@@ -266,3 +266,46 @@ class Recommendation(BaseModel):
     category: str
     rationale: str
     projected_impact: str
+
+
+class QualityMetric(BaseModel):
+    label: str
+    value: str
+    trend: str
+
+
+class QualityPromptRisk(BaseModel):
+    prompt_name: str
+    version: str
+    owner: str
+    hallucination_risk: str
+    confidence_score: str
+    quality_status: str
+
+
+class QualityResponse(BaseModel):
+    metrics: list[QualityMetric]
+    risky_prompts: list[QualityPromptRisk]
+    low_confidence_requests: list[str]
+
+
+class NotificationDestination(BaseModel):
+    id: int
+    name: str
+    channel: str
+    target: str
+    is_active: bool
+    created_at: str
+
+
+class NotificationDestinationCreate(BaseModel):
+    name: str
+    channel: Literal["slack", "email", "webhook", "teams"]
+    target: str
+
+
+class CurrentUser(BaseModel):
+    name: str
+    email: str
+    role: str
+    team: str

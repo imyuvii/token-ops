@@ -1,5 +1,6 @@
 import { AppShell } from "@/components/app-shell";
 import { EventIngestForm } from "@/components/event-ingest-form";
+import { requireSession } from "@/lib/auth";
 
 const nodeSnippet = `import { tokenops } from "./tokenops";
 
@@ -48,12 +49,14 @@ client.track(
     cache_hit=True,
 )`;
 
-export default function IngestPage() {
+export default async function IngestPage() {
+  const session = await requireSession({ roles: ["admin", "engineer", "manager"] });
   return (
     <AppShell
       active="ingest"
       title="Ingest telemetry into TokenOps"
       description="Send AI request telemetry, verify prompt redaction, and bootstrap integrations using the included SDK samples."
+      session={session}
     >
       <EventIngestForm />
 
