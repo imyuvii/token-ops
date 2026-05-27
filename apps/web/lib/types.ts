@@ -227,3 +227,19 @@ export type NotificationDelivery = {
   context: string;
   created_at: string;
 };
+
+export type Organization = {
+  id: number;
+  name: string;
+  plan: string;
+  created_at: string;
+};
+
+export type Member = {
+  id: number;
+  name: string;
+  email: string;
+  role: string;
+  team: string;
+  created_at: string;
+};

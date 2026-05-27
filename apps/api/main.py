@@ -6,7 +6,7 @@ import json
 
 from fastapi import FastAPI, Header, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
+from fastapi.responses import Response, StreamingResponse
 
 from database import get_connection, init_db
 from schemas import (
@@ -16,7 +16,9 @@ from schemas import (
     ApiKeyCreate,
     ApiKeyCreateResponse,
     DashboardResponse,
+    Member,
     NotificationDelivery,
+    Organization,
     PromptInsight,
     Project,
     ReplayRequest,
@@ -28,11 +30,14 @@ from services import (
     create_api_key,
     create_alert_rule,
     create_event,
+    export_events_csv,
     get_anomalies,
     get_dashboard_data,
     get_incidents,
     get_model_comparison,
+    get_current_organization,
     list_notification_deliveries,
+    list_members,
     get_prompt_insights,
     get_recent_events,
     list_api_keys,
@@ -221,3 +226,32 @@ async def stream_events(limit: int = Query(10, ge=1, le=25)):
             await asyncio.sleep(2)
 
     return StreamingResponse(event_generator(), media_type="text/event-stream")
+
+
+@app.get("/api/v1/organization", response_model=Organization)
+def get_organization() -> Organization:
+    with get_connection() as connection:
+        return get_current_organization(connection)
+
+
+@app.get("/api/v1/members", response_model=list[Member])
+def get_members() -> list[Member]:
+    with get_connection() as connection:
+        return list_members(connection)
+
+
+@app.get("/api/v1/export/events.csv")
+def export_events(
+    days: int = Query(30, ge=1, le=90),
+    team: str | None = None,
+    model: str | None = None,
+    environment: str | None = None,
+    application: str | None = None,
+):
+    with get_connection() as connection:
+        payload = export_events_csv(connection, days, team, model, environment, application)
+    return Response(
+        content=payload,
+        media_type="text/csv",
+        headers={"Content-Disposition": "attachment; filename=tokenops-events.csv"},
+    )

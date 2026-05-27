@@ -234,3 +234,19 @@ class NotificationDelivery(BaseModel):
     status: str
     context: str
     created_at: str
+
+
+class Organization(BaseModel):
+    id: int
+    name: str
+    plan: str
+    created_at: str
+
+
+class Member(BaseModel):
+    id: int
+    name: str
+    email: str
+    role: str
+    team: str
+    created_at: str

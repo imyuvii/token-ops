@@ -85,6 +85,24 @@ def init_db() -> None:
                 context TEXT NOT NULL,
                 created_at TEXT NOT NULL
             );
+
+            CREATE TABLE IF NOT EXISTS organizations (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL UNIQUE,
+                plan TEXT NOT NULL,
+                created_at TEXT NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS members (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                organization_id INTEGER NOT NULL,
+                name TEXT NOT NULL,
+                email TEXT NOT NULL UNIQUE,
+                role TEXT NOT NULL,
+                team TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                FOREIGN KEY(organization_id) REFERENCES organizations(id)
+            );
             """
         )
 
@@ -107,6 +125,14 @@ def init_db() -> None:
         notification_count = connection.execute("SELECT COUNT(*) FROM notification_deliveries").fetchone()[0]
         if notification_count == 0:
             seed_notification_deliveries(connection)
+
+        organization_count = connection.execute("SELECT COUNT(*) FROM organizations").fetchone()[0]
+        if organization_count == 0:
+            seed_organizations(connection)
+
+        member_count = connection.execute("SELECT COUNT(*) FROM members").fetchone()[0]
+        if member_count == 0:
+            seed_members(connection)
 
 
 def seed_events(connection: sqlite3.Connection) -> None:
@@ -314,5 +340,36 @@ def seed_notification_deliveries(connection: sqlite3.Connection) -> None:
         ) VALUES (?, ?, ?, ?, ?, ?)
         """,
         deliveries,
+    )
+    connection.commit()
+
+
+def seed_organizations(connection: sqlite3.Connection) -> None:
+    created_at = datetime.now(UTC).isoformat()
+    connection.execute(
+        """
+        INSERT INTO organizations (name, plan, created_at)
+        VALUES (?, ?, ?)
+        """,
+        ("Acme AI Platform", "enterprise", created_at),
+    )
+    connection.commit()
+
+
+def seed_members(connection: sqlite3.Connection) -> None:
+    created_at = datetime.now(UTC).isoformat()
+    organization_id = connection.execute("SELECT id FROM organizations LIMIT 1").fetchone()[0]
+    members = [
+        (organization_id, "Avery Shah", "avery@acme.ai", "admin", "Platform", created_at),
+        (organization_id, "Nina Patel", "nina@acme.ai", "engineer", "Customer Ops", created_at),
+        (organization_id, "Leo Kim", "leo@acme.ai", "viewer", "Finance", created_at),
+        (organization_id, "Maya Chen", "maya@acme.ai", "manager", "Revenue Systems", created_at),
+    ]
+    connection.executemany(
+        """
+        INSERT INTO members (organization_id, name, email, role, team, created_at)
+        VALUES (?, ?, ?, ?, ?, ?)
+        """,
+        members,
     )
     connection.commit()

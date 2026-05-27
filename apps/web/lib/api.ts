@@ -10,12 +10,14 @@ import type {
   DashboardResponse,
   ModelComparison,
   NotificationDelivery,
+  Organization,
   Project,
   PromptInsight,
   ReplayRequest,
   ReplayResult,
   TelemetryEvent,
   TelemetryEventCreate,
+  Member,
 } from "@/lib/types";
 
 const API_BASE_URL =
@@ -169,4 +171,12 @@ export async function getAnomalies(filters?: DashboardFilters): Promise<AnomalyI
 
 export async function getNotifications(): Promise<NotificationDelivery[]> {
   return fetchJson<NotificationDelivery[]>("/api/v1/notifications");
+}
+
+export async function getOrganization(): Promise<Organization> {
+  return fetchJson<Organization>("/api/v1/organization");
+}
+
+export async function getMembers(): Promise<Member[]> {
+  return fetchJson<Member[]>("/api/v1/members");
 }

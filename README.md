@@ -76,6 +76,9 @@ This starts:
 - `PATCH /api/v1/api-keys/{id}?is_active=true|false`
 - `POST /api/v1/replay`
 - `GET /api/v1/anomalies`
+- `GET /api/v1/organization`
+- `GET /api/v1/members`
+- `GET /api/v1/export/events.csv`
 
 `POST /api/v1/events` accepts an optional `x-tokenops-key` header for governed ingestion.
 
@@ -101,6 +104,7 @@ Telemetry events are stored with:
 - Baseline anomaly insights for spend, latency, cache, and error rate
 - Live event streaming and notification outbox
 - Dockerized local stack and GitHub Actions CI
+- Organization roles and CSV export support
 
 ## Next recommended milestones
 

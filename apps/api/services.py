@@ -3,10 +3,12 @@ from __future__ import annotations
 import math
 import re
 import sqlite3
+from io import StringIO
 from datetime import UTC, datetime, timedelta
 from hashlib import sha256
 from typing import Any
 from uuid import uuid4
+import csv
 
 from schemas import (
     AnomalyInsight,
@@ -23,7 +25,9 @@ from schemas import (
     MetricCard,
     ModelComparison,
     NotificationDelivery,
+    Organization,
     PromptInsight,
+    Member,
     Project,
     ReplayRequest,
     ReplayResult,
@@ -510,6 +514,33 @@ def list_notification_deliveries(connection: sqlite3.Connection, limit: int = 25
     ]
 
 
+def get_current_organization(connection: sqlite3.Connection) -> Organization:
+    row = connection.execute("SELECT * FROM organizations ORDER BY id ASC LIMIT 1").fetchone()
+    return Organization(
+        id=row["id"],
+        name=row["name"],
+        plan=row["plan"],
+        created_at=row["created_at"],
+    )
+
+
+def list_members(connection: sqlite3.Connection) -> list[Member]:
+    rows = connection.execute(
+        "SELECT * FROM members ORDER BY role ASC, name ASC"
+    ).fetchall()
+    return [
+        Member(
+            id=row["id"],
+            name=row["name"],
+            email=row["email"],
+            role=row["role"],
+            team=row["team"],
+            created_at=row["created_at"],
+        )
+        for row in rows
+    ]
+
+
 def record_notification_delivery(
     connection: sqlite3.Connection,
     rule_name: str,
@@ -902,6 +933,59 @@ def get_anomalies(
         )
 
     return anomalies
+
+
+def export_events_csv(
+    connection: sqlite3.Connection,
+    days: int,
+    team: str | None,
+    model: str | None,
+    environment: str | None,
+    application: str | None,
+) -> str:
+    rows = _query_events(connection, days, team, model, environment, application)
+    output = StringIO()
+    writer = csv.writer(output)
+    writer.writerow(
+        [
+            "request_id",
+            "timestamp",
+            "team",
+            "application",
+            "environment",
+            "endpoint",
+            "provider",
+            "model",
+            "prompt_name",
+            "prompt_version",
+            "total_tokens",
+            "cost",
+            "latency_ms",
+            "status",
+            "cache_hit",
+        ]
+    )
+    for row in rows:
+        writer.writerow(
+            [
+                row["request_id"],
+                row["timestamp"],
+                row["team"],
+                row["application"],
+                row["environment"],
+                row["endpoint"],
+                row["provider"],
+                row["model"],
+                row["prompt_name"],
+                row["prompt_version"],
+                row["total_tokens"],
+                row["cost"],
+                row["latency_ms"],
+                row["status"],
+                row["cache_hit"],
+            ]
+        )
+    return output.getvalue()
 
 
 def _record_triggered_notifications(connection: sqlite3.Connection) -> None:

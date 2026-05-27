@@ -1,10 +1,15 @@
 import { ApiKeysManager } from "@/components/api-keys-manager";
 import { AppShell } from "@/components/app-shell";
 import { StatusPill } from "@/components/status-pill";
-import { getApiKeys, getProjects } from "@/lib/api";
+import { getApiKeys, getMembers, getOrganization, getProjects } from "@/lib/api";
 
 export default async function GovernancePage() {
-  const [projects, apiKeys] = await Promise.all([getProjects(), getApiKeys()]);
+  const [projects, apiKeys, organization, members] = await Promise.all([
+    getProjects(),
+    getApiKeys(),
+    getOrganization(),
+    getMembers(),
+  ]);
 
   return (
     <AppShell
@@ -12,6 +17,18 @@ export default async function GovernancePage() {
       title="Governed ingestion and project controls"
       description="Manage projects, monthly AI budgets, and ingestion credentials used by downstream applications."
     >
+      <section className="rounded-[26px] border border-white/8 bg-white/5 p-5">
+        <div className="flex items-center justify-between gap-4">
+          <div>
+            <p className="text-sm uppercase tracking-[0.24em] text-slate-400">Organization</p>
+            <h2 className="mt-2 font-space-grotesk text-2xl font-semibold text-white">
+              {organization.name}
+            </h2>
+          </div>
+          <StatusPill tone="success">{organization.plan}</StatusPill>
+        </div>
+      </section>
+
       <section className="rounded-[26px] border border-white/8 bg-white/5 p-5">
         <p className="text-sm uppercase tracking-[0.24em] text-slate-400">Projects</p>
         <h2 className="mt-2 font-space-grotesk text-2xl font-semibold text-white">
@@ -36,6 +53,54 @@ export default async function GovernancePage() {
       </section>
 
       <ApiKeysManager initialKeys={apiKeys} projects={projects} />
+
+      <section className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
+        <div className="rounded-[26px] border border-white/8 bg-white/5 p-5">
+          <p className="text-sm uppercase tracking-[0.24em] text-slate-400">Members</p>
+          <h2 className="mt-2 font-space-grotesk text-2xl font-semibold text-white">
+            Org roles and access
+          </h2>
+
+          <div className="mt-6 overflow-hidden rounded-[22px] border border-white/8">
+            <table className="min-w-full border-collapse text-left text-sm">
+              <thead className="bg-white/6 text-slate-300">
+                <tr>
+                  <th className="px-4 py-3 font-medium">Name</th>
+                  <th className="px-4 py-3 font-medium">Email</th>
+                  <th className="px-4 py-3 font-medium">Role</th>
+                  <th className="px-4 py-3 font-medium">Team</th>
+                </tr>
+              </thead>
+              <tbody>
+                {members.map((member) => (
+                  <tr key={member.id} className="border-t border-white/6">
+                    <td className="px-4 py-4 font-medium text-white">{member.name}</td>
+                    <td className="px-4 py-4 text-slate-300">{member.email}</td>
+                    <td className="px-4 py-4 text-slate-300">{member.role}</td>
+                    <td className="px-4 py-4 text-slate-300">{member.team}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div className="rounded-[26px] border border-white/8 bg-white/5 p-5">
+          <p className="text-sm uppercase tracking-[0.24em] text-slate-400">Exports</p>
+          <h2 className="mt-2 font-space-grotesk text-2xl font-semibold text-white">
+            Download event history
+          </h2>
+          <a
+            href="http://localhost:8000/api/v1/export/events.csv"
+            className="mt-6 inline-flex rounded-2xl bg-white px-4 py-3 font-medium text-slate-950 transition hover:bg-slate-100"
+          >
+            Export events CSV
+          </a>
+          <p className="mt-4 text-sm text-slate-400">
+            Use filtered CSV exports for finance review, incident postmortems, or offline analysis.
+          </p>
+        </div>
+      </section>
     </AppShell>
   );
 }
