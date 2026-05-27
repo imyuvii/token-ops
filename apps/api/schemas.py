@@ -274,6 +274,12 @@ class QualityMetric(BaseModel):
     trend: str
 
 
+class QualitySignal(BaseModel):
+    label: str
+    value: str
+    status: str
+
+
 class QualityPromptRisk(BaseModel):
     prompt_name: str
     version: str
@@ -283,10 +289,20 @@ class QualityPromptRisk(BaseModel):
     quality_status: str
 
 
+class LowConfidenceCase(BaseModel):
+    request_id: str
+    prompt_name: str
+    model: str
+    confidence_band: str
+    risk_reason: str
+    suggested_action: str
+
+
 class QualityResponse(BaseModel):
     metrics: list[QualityMetric]
+    signal_breakdown: list[QualitySignal]
     risky_prompts: list[QualityPromptRisk]
-    low_confidence_requests: list[str]
+    low_confidence_cases: list[LowConfidenceCase]
 
 
 class NotificationDestination(BaseModel):

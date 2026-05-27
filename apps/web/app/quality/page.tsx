@@ -37,6 +37,32 @@ export default async function QualityPage({
       </div>
 
       <section className="rounded-[26px] border border-white/8 bg-white/5 p-5">
+        <p className="text-sm uppercase tracking-[0.24em] text-slate-400">Signal breakdown</p>
+        <h2 className="mt-2 font-space-grotesk text-2xl font-semibold text-white">
+          Quality confidence drivers
+        </h2>
+
+        <div className="mt-6 grid gap-3 md:grid-cols-3">
+          {quality.signal_breakdown.map((signal) => (
+            <article
+              key={signal.label}
+              className="rounded-[22px] border border-white/8 bg-[#0c1625] p-4"
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-sm text-slate-400">{signal.label}</p>
+                  <p className="mt-2 font-space-grotesk text-3xl text-white">{signal.value}</p>
+                </div>
+                <StatusPill tone={signal.status === "healthy" ? "success" : "warning"}>
+                  {signal.status}
+                </StatusPill>
+              </div>
+            </article>
+          ))}
+        </div>
+      </section>
+
+      <section className="rounded-[26px] border border-white/8 bg-white/5 p-5">
         <p className="text-sm uppercase tracking-[0.24em] text-slate-400">Prompt risk</p>
         <h2 className="mt-2 font-space-grotesk text-2xl font-semibold text-white">
           Prompt families needing the most attention
@@ -82,14 +108,23 @@ export default async function QualityPage({
         </h2>
 
         <div className="mt-6 grid gap-3 lg:grid-cols-2 xl:grid-cols-4">
-          {quality.low_confidence_requests.map((requestId) => (
+          {quality.low_confidence_cases.map((item) => (
             <article
-              key={requestId}
+              key={item.request_id}
               className="rounded-[22px] border border-white/8 bg-[#0c1625] p-4"
             >
-              <p className="font-space-grotesk text-lg text-white">{requestId}</p>
-              <p className="mt-2 text-sm text-slate-400">
-                Inspect this trace in the Requests view or replay it for debugging.
+              <div className="flex items-start justify-between gap-3">
+                <p className="font-space-grotesk text-lg text-white">{item.request_id}</p>
+                <StatusPill tone={item.confidence_band === "low" ? "danger" : "warning"}>
+                  {item.confidence_band}
+                </StatusPill>
+              </div>
+              <p className="mt-2 text-sm text-slate-300">
+                {item.prompt_name} • {item.model}
+              </p>
+              <p className="mt-2 text-sm text-slate-400">{item.risk_reason}</p>
+              <p className="mt-3 text-sm text-cyan-200">
+                {item.suggested_action}
               </p>
             </article>
           ))}

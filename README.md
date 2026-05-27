@@ -126,6 +126,7 @@ Telemetry events are stored with:
 - Optimization benchmarks and recommendations
 - Local role-based sign-in and protected admin mutations
 - Quality and hallucination-risk analytics
+- Signal-level quality breakdowns and low-confidence review cases
 
 ## Next recommended milestones
 

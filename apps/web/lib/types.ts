@@ -266,6 +266,12 @@ export type QualityMetric = {
   trend: string;
 };
 
+export type QualitySignal = {
+  label: string;
+  value: string;
+  status: string;
+};
+
 export type QualityPromptRisk = {
   prompt_name: string;
   version: string;
@@ -277,8 +283,16 @@ export type QualityPromptRisk = {
 
 export type QualityResponse = {
   metrics: QualityMetric[];
+  signal_breakdown: QualitySignal[];
   risky_prompts: QualityPromptRisk[];
-  low_confidence_requests: string[];
+  low_confidence_cases: {
+    request_id: string;
+    prompt_name: string;
+    model: string;
+    confidence_band: string;
+    risk_reason: string;
+    suggested_action: string;
+  }[];
 };
 
 export type CurrentUser = {
